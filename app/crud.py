@@ -1,13 +1,12 @@
-# app/crud.py
-from sqlalchemy.orm import Session
-from . import models, schemas
+from app.firebase_config import db
+from app.models import User
 
-def create_user(db: Session, user: schemas.UserCreate):
-    db_user = models.User(**user.dict())
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+def get_users(user: User):
+    users_ref = db.collection("users")
+    docs = users_ref.stream()
+    return [doc.to_dict() for doc in docs]
 
-def get_users(db: Session, skip: int = 0, limit: int = 10):
-    return db.query(models.User).offset(skip).limit(limit).all()
+def create_user(user: User):
+    doc_ref = db.collection("users").document()  # Auto ID
+    doc_ref.set(user.dict())
+    return {"message": "User added", "id": doc_ref.id}
