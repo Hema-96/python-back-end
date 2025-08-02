@@ -28,6 +28,7 @@ class User(SQLModel, table=True):
     admin_profile: Optional["AdminProfile"] = Relationship(back_populates="user")
     college_profile: Optional["CollegeProfile"] = Relationship(back_populates="user")
     student_profile: Optional["StudentProfile"] = Relationship(back_populates="user")
+    colleges: List["College"] = Relationship(back_populates="user")
 
 class AdminProfile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
