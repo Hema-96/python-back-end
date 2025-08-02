@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from typing import Optional
 from app.core.database import get_session
 from app.core.security import verify_token
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.auth import TokenData
 import logging
 
@@ -16,7 +16,6 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: Session = Depends(get_session)
 ) -> User:
-    """Get current authenticated user"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -34,7 +33,6 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
         
-        # Get user from database
         statement = select(User).where(User.id == user_id)
         user = session.exec(statement).first()
         
@@ -56,7 +54,6 @@ async def get_current_user(
         raise credentials_exception
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """Get current active user"""
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -64,8 +61,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
         )
     return current_user
 
-def require_role(required_role: str):
-    """Dependency to require specific user role"""
+def require_role(required_role: int):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role.value != required_role:
             raise HTTPException(
@@ -75,18 +71,16 @@ def require_role(required_role: str):
         return current_user
     return role_checker
 
-# Role-specific dependencies
-require_admin = require_role("admin")
-require_college = require_role("college")
-require_student = require_role("student")
+require_admin = require_role(1)  # UserRole.ADMIN = 1
+require_college = require_role(2)  # UserRole.COLLEGE = 2
+require_student = require_role(3)  # UserRole.STUDENT = 3
 
-def require_any_role(*roles: str):
-    """Dependency to require any of the specified roles"""
+def require_any_role(*roles: int):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role.value not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {', '.join(roles)}"
+                detail=f"Access denied. Required roles: {', '.join(map(str, roles))}"
             )
         return current_user
     return role_checker 

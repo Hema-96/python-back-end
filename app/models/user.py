@@ -1,13 +1,13 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List
 from datetime import datetime
-from enum import Enum
+from enum import IntEnum
 from sqlalchemy import JSON
 
-class UserRole(str, Enum):
-    ADMIN = "admin"
-    COLLEGE = "college"
-    STUDENT = "student"
+class UserRole(IntEnum):
+    ADMIN = 1
+    COLLEGE = 2
+    STUDENT = 3
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

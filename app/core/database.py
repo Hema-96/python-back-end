@@ -68,7 +68,7 @@ def init_db():
                 password_hash=get_password_hash("admin123"),
                 first_name="System",
                 last_name="Administrator",
-                role=UserRole.ADMIN,
+                role=UserRole.ADMIN,  # This will be stored as 1
                 is_active=True,
                 is_verified=True,
                 created_at=datetime.utcnow(),

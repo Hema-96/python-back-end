@@ -72,7 +72,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Token verification error: {e}")
         return None
 
-def generate_tokens(user_id: int, email: str, role: str) -> Dict[str, str]:
+def generate_tokens(user_id: int, email: str, role: int) -> Dict[str, str]:
     """Generate both access and refresh tokens"""
     try:
         access_token = create_access_token(
