@@ -1,44 +1,47 @@
-connection_url = "postgresql://postgres.poptklbkuamytrzcgeiy:8gWkOCJOugd6Idj5@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
-
-from sqlmodel import SQLModel, Field
-from typing import Optional
-
-class User(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, unique=True)
-    password: str
-    name: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-from sqlmodel import create_engine, Session
-engine = create_engine(connection_url, echo=True)
-
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from app.core.config import settings
+from app.core.database import create_db_and_tables, init_db
+from app.api.v1.router import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    SQLModel.metadata.create_all(engine)
+    # Startup
+    create_db_and_tables()
+    init_db()  # Initialize with default data
     yield
-    # Cleanup if needed 
-    
-app = FastAPI(lifespan=lifespan)
+    # Shutdown
+    pass
 
-@app.post("/users/")    
-def create_user(user: User):
-    with Session(engine) as session:
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-    return user
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="Tamil Nadu Engineering College Counselling Backend API",
+    lifespan=lifespan
+)
 
-from typing import List 
-from sqlmodel import select
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/users/", response_model=List[User])
-def read_users():
-    with Session(engine) as session:
-        statement = select(User)
-        results = session.exec(statement).all()
-    return results
+# Include API routes
+app.include_router(api_router, prefix="/api/v1")
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Tamil Nadu Engineering College Counselling API",
+        "version": settings.APP_VERSION,
+        "status": "running"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
