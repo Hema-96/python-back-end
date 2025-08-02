@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
+from fastapi import UploadFile
 from app.models.college import CollegeType, CounsellingType, VerificationStatus
 
 # Address Schema
@@ -51,7 +52,7 @@ class CollegeBasicInfo(BaseModel):
     counselling_type: CounsellingType = Field(default=CounsellingType.UG, description="Counselling type")
     address: AddressSchema
     contact: ContactSchema
-    logo_url: Optional[str] = Field(None, description="Logo URL")
+    logo_file: Optional[UploadFile] = Field(None, description="College logo file")
 
     @validator('college_code')
     def validate_college_code(cls, v):
@@ -65,7 +66,7 @@ class PrincipalSchema(BaseModel):
     designation: Optional[str] = Field(None, max_length=100, description="Designation")
     phone: Optional[str] = Field(None, max_length=15, description="Phone number")
     email: str = Field(..., max_length=100, description="Email address")
-    id_proof_url: Optional[str] = Field(None, description="ID proof document URL")
+    id_proof_file: Optional[UploadFile] = Field(None, description="ID proof document file")
 
     @validator('email')
     def validate_email(cls, v):
@@ -102,7 +103,7 @@ class FacilitiesSchema(BaseModel):
 # Document Schema
 class DocumentSchema(BaseModel):
     doc_type: str = Field(..., max_length=100, description="Document type")
-    doc_url: str = Field(..., description="Document URL")
+    doc_file: UploadFile = Field(..., description="Document file")
 
 # Bank Details Schema
 class BankDetailsSchema(BaseModel):
@@ -111,7 +112,7 @@ class BankDetailsSchema(BaseModel):
     account_number: str = Field(..., max_length=50, description="Account number")
     ifsc_code: str = Field(..., max_length=20, description="IFSC code")
     upi_id: Optional[str] = Field(None, max_length=100, description="UPI ID")
-    cancelled_cheque_url: Optional[str] = Field(None, description="Cancelled cheque URL")
+    cancelled_cheque_file: Optional[UploadFile] = Field(None, description="Cancelled cheque file")
 
     @validator('account_number')
     def validate_account_number(cls, v):

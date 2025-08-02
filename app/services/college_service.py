@@ -3,15 +3,13 @@ from fastapi import HTTPException, status
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from app.models.college import (
-    College, CollegePrincipal, CollegeSeatMatrix, CollegeFacilities,
+    College, CollegePrincipal, CollegeSeatMatrix, CollegeFacilities, 
     CollegeDocuments, CollegeBankDetails, CollegeVerificationStatus,
-    VerificationStatus
+    CollegeType, CounsellingType, VerificationStatus
 )
 from app.models.user import User, UserRole
-from app.schemas.college import (
-    CollegeSubmissionSchema, CollegeResponse, CollegeListResponse,
-    CollegeVerificationResponse
-)
+from app.schemas.college import CollegeSubmissionSchema
+from app.services.file_service import FileService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,6 +17,7 @@ logger = logging.getLogger(__name__)
 class CollegeService:
     def __init__(self, session: Session):
         self.session = session
+        self.file_service = FileService()
 
     def submit_college_data(self, user_id: int, college_data: CollegeSubmissionSchema) -> Dict[str, Any]:
         """Submit complete college data for verification"""
@@ -50,6 +49,12 @@ class CollegeService:
                     detail="User already has a college registered"
                 )
 
+            # Upload logo file if provided
+            logo_url = None
+            if college_data.college.logo_file:
+                logo_upload = self.file_service.upload_file(college_data.college.logo_file, "college-logos")
+                logo_url = logo_upload["file_url"]
+
             # Create college record
             college = College(
                 user_id=user_id,  # Link to the user who created it
@@ -73,13 +78,19 @@ class CollegeService:
                 mobile=college_data.college.contact.mobile,
                 email=college_data.college.contact.email,
                 website=college_data.college.contact.website,
-                logo_url=college_data.college.logo_url,
+                logo_url=logo_url,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
             self.session.add(college)
             self.session.commit()
             self.session.refresh(college)
+
+            # Upload principal ID proof if provided
+            principal_id_proof_url = None
+            if college_data.principal.id_proof_file:
+                id_proof_upload = self.file_service.upload_file(college_data.principal.id_proof_file, "principal-documents")
+                principal_id_proof_url = id_proof_upload["file_url"]
 
             # Create principal record
             principal = CollegePrincipal(
@@ -88,7 +99,7 @@ class CollegeService:
                 designation=college_data.principal.designation,
                 phone=college_data.principal.phone,
                 email=college_data.principal.email,
-                id_proof_url=college_data.principal.id_proof_url,
+                id_proof_url=principal_id_proof_url,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -123,16 +134,25 @@ class CollegeService:
             )
             self.session.add(facilities)
 
-            # Create document records
+            # Upload and create document records
             for doc_data in college_data.documents:
+                # Upload document file
+                doc_upload = self.file_service.upload_file(doc_data.doc_file, "college-documents")
+                
                 document = CollegeDocuments(
                     college_id=college.id,
                     doc_type=doc_data.doc_type,
-                    doc_url=doc_data.doc_url,
+                    doc_url=doc_upload["file_url"],
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
                 self.session.add(document)
+
+            # Upload cancelled cheque if provided
+            cancelled_cheque_url = None
+            if college_data.bank_details.cancelled_cheque_file:
+                cheque_upload = self.file_service.upload_file(college_data.bank_details.cancelled_cheque_file, "bank-documents")
+                cancelled_cheque_url = cheque_upload["file_url"]
 
             # Create bank details record
             bank_details = CollegeBankDetails(
@@ -142,7 +162,7 @@ class CollegeService:
                 account_number=college_data.bank_details.account_number,
                 ifsc_code=college_data.bank_details.ifsc_code,
                 upi_id=college_data.bank_details.upi_id,
-                cancelled_cheque_url=college_data.bank_details.cancelled_cheque_url,
+                cancelled_cheque_url=cancelled_cheque_url,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -178,106 +198,37 @@ class CollegeService:
                 detail="Internal server error"
             )
 
-    def get_college_by_user(self, user_id: int) -> Optional[College]:
-        """Get college data for a specific user"""
+    def get_college_by_id(self, college_id: int) -> Optional[College]:
+        """Get college by ID"""
+        try:
+            statement = select(College).where(College.id == college_id)
+            return self.session.exec(statement).first()
+        except Exception as e:
+            logger.error(f"Error getting college by ID: {e}")
+            return None
+
+    def get_colleges_by_user(self, user_id: int) -> List[College]:
+        """Get colleges by user ID"""
         try:
             statement = select(College).where(College.user_id == user_id)
-            college = self.session.exec(statement).first()
-            return college
-            
+            return self.session.exec(statement).all()
         except Exception as e:
-            logger.error(f"Error getting college for user {user_id}: {e}")
-            return None
+            logger.error(f"Error getting colleges by user: {e}")
+            return []
 
-    def get_college_details(self, college_id: int) -> Optional[Dict[str, Any]]:
-        """Get complete college details including all related data"""
+    def get_all_colleges(self, skip: int = 0, limit: int = 100) -> List[College]:
+        """Get all colleges with pagination"""
         try:
-            # Get college basic info
-            statement = select(College).where(College.id == college_id)
-            college = self.session.exec(statement).first()
-            if not college:
-                return None
-
-            # Get principal
-            statement = select(CollegePrincipal).where(CollegePrincipal.college_id == college_id)
-            principal = self.session.exec(statement).first()
-
-            # Get seat matrix
-            statement = select(CollegeSeatMatrix).where(CollegeSeatMatrix.college_id == college_id)
-            seat_matrix = self.session.exec(statement).all()
-
-            # Get facilities
-            statement = select(CollegeFacilities).where(CollegeFacilities.college_id == college_id)
-            facilities = self.session.exec(statement).first()
-
-            # Get documents
-            statement = select(CollegeDocuments).where(CollegeDocuments.college_id == college_id)
-            documents = self.session.exec(statement).all()
-
-            # Get bank details
-            statement = select(CollegeBankDetails).where(CollegeBankDetails.college_id == college_id)
-            bank_details = self.session.exec(statement).first()
-
-            # Get verification status
-            statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college_id)
-            verification_status = self.session.exec(statement).first()
-
-            return {
-                "college": college,
-                "principal": principal,
-                "seat_matrix": seat_matrix,
-                "facilities": facilities,
-                "documents": documents,
-                "bank_details": bank_details,
-                "verification_status": verification_status
-            }
-
-        except Exception as e:
-            logger.error(f"Error getting college details for college {college_id}: {e}")
-            return None
-
-    def get_all_colleges(self, skip: int = 0, limit: int = 20, status: Optional[VerificationStatus] = None) -> List[Dict[str, Any]]:
-        """Get all colleges with optional filtering"""
-        try:
-            statement = select(College).join(CollegeVerificationStatus)
-            
-            if status:
-                statement = statement.where(CollegeVerificationStatus.status == status)
-            
-            statement = statement.offset(skip).limit(limit)
-            colleges = self.session.exec(statement).all()
-            
-            result = []
-            for college in colleges:
-                # Get verification status for each college
-                v_status = self.session.exec(
-                    select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college.id)
-                ).first()
-                
-                result.append({
-                    "college": college,
-                    "verification_status": v_status
-                })
-            
-            return result
-
+            statement = select(College).offset(skip).limit(limit)
+            return self.session.exec(statement).all()
         except Exception as e:
             logger.error(f"Error getting all colleges: {e}")
             return []
 
-    def verify_college(self, college_id: int, admin_user_id: int, is_approved: bool, notes: Optional[str] = None, rejected_reason: Optional[str] = None) -> Dict[str, Any]:
-        """Verify or reject a college (admin only)"""
+    def update_college_verification(self, college_id: int, is_verified: bool, verified_by: int, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Update college verification status"""
         try:
-            # Check if admin user exists
-            statement = select(User).where(User.id == admin_user_id)
-            admin_user = self.session.exec(statement).first()
-            if not admin_user or admin_user.role != UserRole.ADMIN:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only administrators can verify colleges"
-                )
-
-            # Get verification status
+            # Get college verification status
             statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college_id)
             verification_status = self.session.exec(statement).first()
             
@@ -288,29 +239,27 @@ class CollegeService:
                 )
 
             # Update verification status
-            verification_status.is_verified = is_approved
-            verification_status.verified_by = admin_user_id
+            verification_status.is_verified = is_verified
+            verification_status.verified_by = verified_by
             verification_status.verification_notes = notes
-            verification_status.rejected_reason = rejected_reason
-            verification_status.status = VerificationStatus.APPROVED if is_approved else VerificationStatus.REJECTED
+            verification_status.status = VerificationStatus.APPROVED if is_verified else VerificationStatus.REJECTED
             verification_status.updated_at = datetime.utcnow()
 
             self.session.add(verification_status)
             self.session.commit()
 
-            logger.info(f"College {college_id} {'approved' if is_approved else 'rejected'} by admin {admin_user_id}")
-            
+            logger.info(f"College verification updated: {college_id}, verified: {is_verified}")
             return {
-                "message": f"College {'approved' if is_approved else 'rejected'} successfully",
+                "message": "College verification status updated successfully",
                 "college_id": college_id,
-                "status": verification_status.status,
-                "verified_by": admin_user_id
+                "is_verified": is_verified,
+                "status": verification_status.status
             }
 
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error verifying college {college_id}: {e}")
+            logger.error(f"Error updating college verification: {e}")
             self.session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -25,14 +25,24 @@ def drop_all_tables():
         logger.error(f"Error dropping database tables: {e}")
         raise
 
-def create_db_and_tables():
-    """Create database tables"""
+def reset_database():
+    """Reset database by dropping all tables and recreating them"""
     try:
-        # First drop all tables to ensure clean slate
+        logger.info("Resetting database...")
         drop_all_tables()
-        # Then create all tables with new schema
+        create_db_and_tables()
+        init_db()
+        logger.info("Database reset completed successfully")
+    except Exception as e:
+        logger.error(f"Error resetting database: {e}")
+        raise
+
+def create_db_and_tables():
+    """Create database tables if they don't exist"""
+    try:
+        # Only create tables if they don't exist (don't drop existing tables)
         SQLModel.metadata.create_all(engine)
-        logger.info("Database tables created successfully")
+        logger.info("Database tables created/verified successfully")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
         raise

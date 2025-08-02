@@ -1,42 +1,6 @@
-# Tamil Nadu Engineering College Counselling Backend
+# Tamil Nadu Engineering College Counselling Backend API
 
-A comprehensive backend system for Tamil Nadu Engineering College Counselling with role-based authentication and college data management.
-
-## 🏗️ Project Structure
-
-```
-python-back-end/
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       ├── auth.py          # Authentication endpoints
-│   │       ├── users.py         # User management endpoints
-│   │       ├── colleges.py      # College data submission endpoints
-│   │       └── router.py        # API router
-│   ├── core/
-│   │   ├── config.py           # Application settings
-│   │   ├── database.py         # Database configuration
-│   │   └── security.py         # JWT and password utilities
-│   ├── middleware/
-│   │   └── auth.py             # Authentication middleware
-│   ├── models/
-│   │   ├── user.py             # User and profile models
-│   │   ├── college.py          # College data models
-│   │   └── __init__.py
-│   ├── schemas/
-│   │   ├── auth.py             # Authentication schemas
-│   │   ├── user.py             # User profile schemas
-│   │   ├── college.py          # College data schemas
-│   │   └── __init__.py
-│   ├── services/
-│   │   ├── auth_service.py     # Authentication business logic
-│   │   └── college_service.py  # College data business logic
-│   ├── utils/
-│   │   └── helpers.py          # Utility functions
-│   └── main.py                 # FastAPI application
-├── requirements.txt
-└── README.md
-```
+A comprehensive FastAPI backend for managing engineering college counselling in Tamil Nadu.
 
 ## 🚀 Features
 
@@ -55,6 +19,7 @@ python-back-end/
 - **Seat Matrix Management** with category-wise seat allocation
 - **Document Management** for college certificates and approvals
 - **Bank Details Management** for payment processing
+- **File Upload Support** with Supabase storage integration
 
 ## 📊 Database Schema
 
@@ -97,6 +62,8 @@ python-back-end/
    ```env
    DATABASE_URL=your_database_url
    SECRET_KEY=your_secret_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_KEY=your_supabase_key
    ```
 
 5. **Run the application**
@@ -115,179 +82,64 @@ Content-Type: application/json
 
 {
   "email": "college@example.com",
-  "password": "password123",
+  "password": "securepassword123",
   "first_name": "John",
   "last_name": "Doe",
+  "phone": "9876543210",
   "role": 2
 }
 ```
 
-#### Login
+#### Login User
 ```http
 POST /api/v1/auth/login
 Content-Type: application/json
 
 {
   "email": "college@example.com",
-  "password": "password123"
+  "password": "securepassword123"
 }
 ```
 
-### College Data Submission
+### College Data Endpoints
 
-#### Submit College Data
+#### Submit College Data (with File Uploads)
 ```http
 POST /api/v1/colleges/submit
-Authorization: Bearer <token>
-Content-Type: application/json
+Content-Type: multipart/form-data
 
-{
-  "college": {
-    "college_code": "ABC123",
-    "name": "ABC Engineering College",
-    "short_name": "ABC",
-    "type": "Private",
-    "university_affiliation": "Anna University",
-    "year_established": 1999,
-    "naac_grade": "A",
-    "nba_status": true,
-    "aicte_approved": true,
-    "counselling_type": "UG",
-    "address": {
-      "line1": "123 Main Rd",
-      "line2": "Near Bus Stand",
-      "city": "Chennai",
-      "district": "Chennai",
-      "state": "Tamil Nadu",
-      "pincode": "600001"
-    },
-    "contact": {
-      "phone": "044-1234567",
-      "mobile": "9876543210",
-      "email": "admin@abcengg.edu.in",
-      "website": "https://abcengg.edu.in"
-    },
-    "logo_url": "https://cdn.site.com/logos/abc_logo.png"
-  },
-  "principal": {
-    "name": "Dr. Raj Kumar",
-    "designation": "Principal",
-    "phone": "9876543211",
-    "email": "principal@abcengg.edu.in",
-    "id_proof_url": "https://cdn.site.com/docs/principal_id.png"
-  },
-  "seat_matrix": [
-    {
-      "course_name": "Computer Science and Engineering",
-      "intake_capacity": 120,
-      "general_seats": 60,
-      "sc_seats": 20,
-      "st_seats": 10,
-      "obc_seats": 25,
-      "minority_seats": 5
-    }
-  ],
-  "facilities": {
-    "hostel_available": true,
-    "transport_available": true,
-    "wifi_available": true,
-    "lab_facilities": "CSE, ECE, Mechanical, Civil",
-    "placement_cell": true
-  },
-  "documents": [
-    {
-      "doc_type": "AICTE Approval",
-      "doc_url": "https://cdn.site.com/docs/aicte.pdf"
-    },
-    {
-      "doc_type": "Affiliation Certificate",
-      "doc_url": "https://cdn.site.com/docs/affiliation.pdf"
-    }
-  ],
-  "bank_details": {
-    "bank_name": "State Bank of India",
-    "branch": "Anna Nagar",
-    "account_number": "123456789012",
-    "ifsc_code": "SBIN0001234",
-    "upi_id": "abcengg@upi",
-    "cancelled_cheque_url": "https://cdn.site.com/docs/cheque.png"
-  }
-}
+# Form fields for college data
+# File uploads for documents, logos, etc.
 ```
 
-#### Get My College Data
-```http
-GET /api/v1/colleges/my-college
-Authorization: Bearer <token>
+For detailed file upload documentation, see [FILE_UPLOAD_GUIDE.md](FILE_UPLOAD_GUIDE.md)
+
+## 🗄️ Database Management
+
+### Database Persistence
+The database now **persists data between application restarts**. The application will:
+- Create tables if they don't exist
+- Preserve existing data
+- Only initialize default admin user if not present
+
+### Manual Database Reset
+If you need to reset the database (clear all data), use the reset script:
+
+```bash
+python reset_db.py
 ```
 
-### Admin Endpoints
-
-#### Get All Colleges
-```http
-GET /api/v1/colleges/all?skip=0&limit=20&status=pending
-Authorization: Bearer <admin_token>
-```
-
-#### Get Pending Colleges
-```http
-GET /api/v1/colleges/pending?skip=0&limit=20
-Authorization: Bearer <admin_token>
-```
-
-#### Verify College
-```http
-POST /api/v1/colleges/{college_id}/verify?is_approved=true&notes=All documents verified
-Authorization: Bearer <admin_token>
-```
-
-#### Get College Details
-```http
-GET /api/v1/colleges/{college_id}
-Authorization: Bearer <admin_token>
-```
-
-### Public Endpoints
-
-#### Get Approved Colleges
-```http
-GET /api/v1/colleges/approved?skip=0&limit=20
-```
-
-## 🔐 Default Admin Credentials
-
-- **Email**: `admin@tncounselling.com`
-- **Password**: `admin123`
-
-## 📋 Role Permissions
-
-### Admin (Role: 1)
-- ✅ View all colleges
-- ✅ Verify/reject college submissions
-- ✅ Manage all users
-- ✅ Access admin dashboard
-
-### College Admin (Role: 2)
-- ✅ Submit college data
-- ✅ View own college data
-- ✅ Update college information
-- ❌ Cannot verify other colleges
-
-### Student (Role: 3)
-- ✅ View approved colleges
-- ✅ Access student dashboard
-- ❌ Cannot submit college data
-
-## 🛠️ Development
+⚠️ **Warning**: This will delete ALL data in the database!
 
 ### Database Migrations
 The application automatically creates and manages database tables. To reset the database:
 
 ```python
 # In app/core/database.py
-def create_db_and_tables():
+def reset_database():
     drop_all_tables()  # This will drop all tables
-    SQLModel.metadata.create_all(engine)  # This will recreate them
+    create_db_and_tables()  # This will recreate them
+    init_db()  # This will add default data
 ```
 
 ### Adding New Features
@@ -308,6 +160,8 @@ def create_db_and_tables():
 ```env
 DATABASE_URL=postgresql://user:password@host:port/database
 SECRET_KEY=your-super-secret-key-change-in-production
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
 DEBUG=False
 ENVIRONMENT=production
 ```
@@ -317,6 +171,7 @@ ENVIRONMENT=production
 - Use strong `SECRET_KEY`
 - Configure proper `DATABASE_URL`
 - Set up proper CORS origins
+- Configure Supabase credentials
 
 ## 🤝 Contributing
 
