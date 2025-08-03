@@ -43,11 +43,11 @@ class CollegeService:
             # Check if user already has a college
             statement = select(College).where(College.user_id == user_id)
             existing_user_college = self.session.exec(statement).first()
-            if existing_user_college:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="User already has a college registered"
-                )
+            # if existing_user_college:
+            #     raise HTTPException(
+            #         status_code=status.HTTP_400_BAD_REQUEST,
+            #         detail="User already has a college registered"
+            #     )
 
             # Upload logo file if provided
             logo_url = None

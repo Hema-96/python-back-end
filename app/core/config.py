@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     
     # Supabase Configuration
     SUPABASE_URL: str = "https://poptklbkuamytrzcgeiy.supabase.co"
-    SUPABASE_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvcHRrbGJrdWFteXRyemNnZWl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ5NzI5NzAsImV4cCI6MjA1MDU0ODk3MH0.Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8"
+    SUPABASE_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvcHRrbGJrdWFteXRyemNnZWl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzgwNjI2MiwiZXhwIjoyMDY5MzgyMjYyfQ._Bl1HIHE8Y_gIvXuwxQ4KzfToXPP3CGvwAFpH2Kdwd0"
+    SUPABASE_BUCKET: str = "uploads"
     
     # Security Configuration
     SECRET_KEY: str = "your-super-secret-key-change-in-production"

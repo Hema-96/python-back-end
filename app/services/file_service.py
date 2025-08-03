@@ -10,7 +10,16 @@ logger = logging.getLogger(__name__)
 
 class FileService:
     def __init__(self):
-        self.supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        # Initialize Supabase client with proper credentials
+        try:
+            self.supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            logger.info("Supabase client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Supabase client: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to initialize file storage service"
+            )
     
     def validate_file(self, file: UploadFile) -> bool:
         """Validate file type and size"""
@@ -39,38 +48,34 @@ class FileService:
             # Validate file
             self.validate_file(file)
             
-            # Generate unique filename
-            file_extension = os.path.splitext(file.filename)[1] if file.filename else ""
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            file_path = f"{folder}/{unique_filename}"
-            
             # Read file content
             file_content = file.file.read()
             
-            # Upload to Supabase storage
-            result = self.supabase.storage.from_("college-documents").upload(
-                path=unique_filename,
-                file=file_content,
-                file_options={"content-type": file.content_type}
-            )
+            # Generate unique filename
+            filename = f"{uuid.uuid4().hex}_{file.filename}"
             
-            if result:
-                # Get public URL
-                public_url = self.supabase.storage.from_("college-documents").get_public_url(unique_filename)
-                
-                logger.info(f"File uploaded successfully: {file_path}")
-                return {
-                    "file_path": file_path,
-                    "file_url": public_url,
-                    "file_name": file.filename,
-                    "file_size": len(file_content),
-                    "content_type": file.content_type
-                }
-            else:
+            # Upload to Supabase Storage
+            response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).upload(filename, file_content)
+            
+            # Check for upload errors
+            if isinstance(response, dict) and response.get("error"):
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to upload file to storage"
+                    detail=f"Supabase upload error: {response['error']['message']}"
                 )
+            
+            # Get public URL
+            public_url = self.supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
+            
+            logger.info(f"File uploaded successfully to Supabase: {filename}")
+            return {
+                "file_path": filename,
+                "file_url": public_url,
+                "file_name": file.filename,
+                "file_size": len(file_content),
+                "content_type": file.content_type,
+                "storage_type": "supabase"
+            }
                 
         except HTTPException:
             raise
@@ -78,7 +83,7 @@ class FileService:
             logger.error(f"Error uploading file: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal server error during file upload"
+                detail=f"Internal server error during file upload: {str(e)}"
             )
     
     def delete_file(self, file_path: str) -> bool:
@@ -88,14 +93,14 @@ class FileService:
             filename = os.path.basename(file_path)
             
             # Delete from Supabase storage
-            result = self.supabase.storage.from_("college-documents").remove([filename])
+            response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).remove([filename])
             
-            if result:
-                logger.info(f"File deleted successfully: {file_path}")
-                return True
-            else:
-                logger.warning(f"Failed to delete file: {file_path}")
+            if isinstance(response, dict) and response.get("error"):
+                logger.error(f"Failed to delete from Supabase: {response['error']['message']}")
                 return False
+            
+            logger.info(f"File deleted successfully from Supabase: {filename}")
+            return True
                 
         except Exception as e:
             logger.error(f"Error deleting file: {e}")
@@ -105,7 +110,7 @@ class FileService:
         """Get public URL for a file"""
         try:
             filename = os.path.basename(file_path)
-            return self.supabase.storage.from_("college-documents").get_public_url(filename)
+            return self.supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
         except Exception as e:
             logger.error(f"Error getting file URL: {e}")
             return None 

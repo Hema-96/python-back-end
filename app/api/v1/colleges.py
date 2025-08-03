@@ -27,13 +27,13 @@ async def submit_college_data(
     college_code: str = Form(..., description="Unique college code"),
     name: str = Form(..., description="College name"),
     short_name: Optional[str] = Form(None, description="Short name"),
-    type: CollegeType = Form(CollegeType.PRIVATE, description="College type"),
+    type: str = Form("Private", description="College type (Private, Government, Aided, Self Financing)"),
     university_affiliation: Optional[str] = Form(None, description="University affiliation"),
     year_established: Optional[int] = Form(None, description="Year established"),
     naac_grade: Optional[str] = Form(None, description="NAAC grade"),
     nba_status: bool = Form(False, description="NBA status"),
     aicte_approved: bool = Form(False, description="AICTE approval status"),
-    counselling_type: CounsellingType = Form(CounsellingType.UG, description="Counselling type"),
+    counselling_type: str = Form("UG", description="Counselling type (UG, PG, Diploma)"),
     
     # Address
     address_line1: str = Form(..., description="Address line 1"),
@@ -96,22 +96,66 @@ async def submit_college_data(
     **Note:** This endpoint accepts multipart/form-data with files and form fields.
     """
     try:
+        # Validate enum values
+        try:
+            college_type = CollegeType(type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid college type: {type}. Valid values are: {[t.value for t in CollegeType]}"
+            )
+        
+        try:
+            counselling_type_enum = CounsellingType(counselling_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid counselling type: {counselling_type}. Valid values are: {[c.value for c in CounsellingType]}"
+            )
+        
         # Parse JSON strings
         try:
             seat_matrix_data = json.loads(seat_matrix)
-            document_types_data = json.loads(document_types)
+            if not isinstance(seat_matrix_data, list):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="seat_matrix must be a JSON array"
+                )
         except json.JSONDecodeError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid JSON format: {str(e)}"
+                detail=f"Invalid seat_matrix JSON format: {str(e)}"
+            )
+        
+        try:
+            document_types_data = json.loads(document_types)
+            if not isinstance(document_types_data, list):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="document_types must be a JSON array"
+                )
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid document_types JSON format: {str(e)}"
             )
         
         # Validate document files and types match
         if len(document_files) != len(document_types_data):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Number of document files must match number of document types"
+                detail=f"Number of document files ({len(document_files)}) must match number of document types ({len(document_types_data)})"
             )
+        
+        # Validate seat matrix data
+        for i, seat_data in enumerate(seat_matrix_data):
+            required_fields = ['course_name', 'intake_capacity', 'general_seats', 'sc_seats', 'st_seats', 'obc_seats', 'minority_seats']
+            missing_fields = [field for field in required_fields if field not in seat_data]
+            if missing_fields:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Seat matrix item {i} missing required fields: {missing_fields}"
+                )
         
         # Create address schema
         address = AddressSchema(
@@ -136,13 +180,13 @@ async def submit_college_data(
             college_code=college_code,
             name=name,
             short_name=short_name,
-            type=type,
+            type=college_type,
             university_affiliation=university_affiliation,
             year_established=year_established,
             naac_grade=naac_grade,
             nba_status=nba_status,
             aicte_approved=aicte_approved,
-            counselling_type=counselling_type,
+            counselling_type=counselling_type_enum,
             address=address,
             contact=contact,
             logo_file=logo_file
@@ -160,7 +204,13 @@ async def submit_college_data(
         # Create seat matrix schemas
         seat_matrix_schemas = []
         for seat_data in seat_matrix_data:
-            seat_matrix_schemas.append(SeatMatrixSchema(**seat_data))
+            try:
+                seat_matrix_schemas.append(SeatMatrixSchema(**seat_data))
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid seat matrix data: {str(e)}"
+                )
         
         # Create facilities schema
         facilities = FacilitiesSchema(
@@ -208,7 +258,7 @@ async def submit_college_data(
         logger.error(f"College data submission error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail=f"Internal server error: {str(e)}"
         )
 
 @router.get("/my-college", summary="Get current user's college data")

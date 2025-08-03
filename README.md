@@ -62,11 +62,9 @@ A comprehensive FastAPI backend for managing engineering college counselling in 
    ```env
    DATABASE_URL=your_database_url
    SECRET_KEY=your_secret_key
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_KEY=your_supabase_key
    ```
 
-5. **Run the application**
+5. **Start the server**
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
@@ -154,14 +152,36 @@ def reset_database():
 - **Swagger UI**: `http://localhost:8000/docs`
 - **ReDoc**: `http://localhost:8000/redoc`
 
+## 📁 File Upload System
+
+### Supabase Storage
+Files are automatically uploaded to Supabase storage with the following features:
+- **Secure storage** in Supabase cloud
+- **Public URLs** for file access
+- **Unique filenames** with UUID to prevent conflicts
+- **File validation** for type and size
+- **Automatic organization** by file type
+
+### File Types Supported
+- **Images**: JPEG, PNG, GIF
+- **Documents**: PDF, DOC, DOCX
+- **Maximum size**: 10MB per file
+
+### Testing File Upload
+```bash
+# Test Supabase upload
+python test_supabase_upload.py
+
+# Test with cURL
+bash corrected_curl_example.sh
+```
+
 ## 🚀 Deployment
 
 ### Environment Variables
 ```env
 DATABASE_URL=postgresql://user:password@host:port/database
 SECRET_KEY=your-super-secret-key-change-in-production
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
 DEBUG=False
 ENVIRONMENT=production
 ```
@@ -171,7 +191,7 @@ ENVIRONMENT=production
 - Use strong `SECRET_KEY`
 - Configure proper `DATABASE_URL`
 - Set up proper CORS origins
-- Configure Supabase credentials
+- Supabase storage is already configured
 
 ## 🤝 Contributing
 
