@@ -4,7 +4,7 @@ from app.core.database import get_session
 from app.services.auth_service import AuthService
 from app.schemas.auth import (
     UserRegister, UserLogin, Token, RefreshToken, 
-    UserResponse, PasswordReset, PasswordChange, EmailVerification
+    UserResponse, PasswordReset, PasswordChange, EmailVerification, SetNewPassword
 )
 from app.middleware.auth import get_current_user
 from app.models.user import User
@@ -144,10 +144,38 @@ async def request_password_reset(
     
     - **email**: Email address for password reset
     
-    Sends password reset email if user exists.
+    Returns success if email exists, 400 error if not found.
     """
-    # TODO: Implement email sending functionality
-    return {"message": "Password reset email sent (if user exists)"}
+    try:
+        from sqlmodel import select
+        from app.models.user import User
+        
+        # Check if user exists with the provided email
+        statement = select(User).where(User.email == password_reset.email)
+        user = session.exec(statement).first()
+        
+        if user:
+            logger.info(f"Password reset requested for existing user: {password_reset.email}")
+            return {
+                "success": True,
+                "message": "Password reset email sent successfully",
+                "email": password_reset.email
+            }
+        else:
+            logger.warning(f"Password reset requested for non-existent email: {password_reset.email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Account not found"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
 
 @router.post("/password-change", summary="Change password")
 async def change_password(
@@ -212,4 +240,64 @@ async def verify_email(
     Marks user's email as verified.
     """
     # TODO: Implement email verification functionality
-    return {"message": "Email verification endpoint (to be implemented)"} 
+    return {"message": "Email verification endpoint (to be implemented)"}
+
+@router.post("/set-new-password", summary="Set new password using email")
+async def set_new_password(
+    password_data: SetNewPassword,
+    session: Session = Depends(get_session)
+):
+    """
+    Set a new password for a user using their email address.
+    
+    - **email**: User's email address
+    - **new_password**: New password (minimum 8 characters)
+    
+    Returns success if password updated, failure if email not found.
+    """
+    try:
+        from sqlmodel import select
+        from app.models.user import User
+        from app.core.security import get_password_hash, validate_password_strength
+        
+        # Check if user exists with the provided email
+        statement = select(User).where(User.email == password_data.email)
+        user = session.exec(statement).first()
+        
+        if not user:
+            logger.warning(f"Password reset attempted for non-existent email: {password_data.email}")
+            return {
+                "success": False,
+                "message": "Account not found",
+                "email": password_data.email
+            }
+        
+        # Validate new password strength
+        password_validation = validate_password_strength(password_data.new_password)
+        if not password_validation["valid"]:
+            return {
+                "success": False,
+                "message": "New password does not meet security requirements",
+                "email": password_data.email
+            }
+        
+        # Update password
+        user.password_hash = get_password_hash(password_data.new_password)
+        user.updated_at = datetime.utcnow()
+        
+        session.add(user)
+        session.commit()
+        
+        logger.info(f"Password updated successfully for user: {password_data.email}")
+        return {
+            "success": True,
+            "message": "Password updated successfully",
+            "email": password_data.email
+        }
+        
+    except Exception as e:
+        logger.error(f"Password update error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        ) 

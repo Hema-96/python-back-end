@@ -63,4 +63,8 @@ class RefreshToken(BaseModel):
     refresh_token: str = Field(..., description="Refresh token")
 
 class EmailVerification(BaseModel):
-    token: str = Field(..., description="Email verification token") 
+    token: str = Field(..., description="Email verification token")
+
+class SetNewPassword(BaseModel):
+    email: str = Field(..., description="User's email address")
+    new_password: str = Field(..., min_length=8, description="New password (minimum 8 characters)") 
