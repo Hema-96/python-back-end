@@ -19,10 +19,13 @@ class User(SQLModel, table=True):
     role: UserRole = Field(default=UserRole.STUDENT)
     is_active: bool = Field(default=True)
     is_verified: bool = Field(default=False)
-    email_verified_at: Optional[datetime] = None
+    email_verified_at: Optional[datetime] = Field(default=None, nullable=True)
     last_login: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    email_otp: Optional[str] = Field(default=None, nullable=True, max_length=10)
+    otp_generated_at: Optional[datetime] = Field(default=None, nullable=True)
+    
     
     # Relationships
     admin_profile: Optional["AdminProfile"] = Relationship(back_populates="user")
