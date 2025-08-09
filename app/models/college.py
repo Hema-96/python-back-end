@@ -102,7 +102,6 @@ class CollegeFacilities(SQLModel, table=True):
 class CollegeDocuments(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     college_id: int = Field(foreign_key="college.id")
-    doc_type: str = Field(max_length=100)
     doc_url: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

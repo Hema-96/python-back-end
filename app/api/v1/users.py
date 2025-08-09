@@ -15,6 +15,8 @@ from app.middleware.auth import (
     require_student, require_any_role
 )
 from app.models.user import User, AdminProfile, CollegeProfile, StudentProfile, UserRole
+from app.models.college import College, CollegeVerificationStatus, VerificationStatus
+from app.schemas.college import CollegeListResponse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -135,22 +137,32 @@ async def get_student_profile(
     return profile
 
 # Admin-only endpoints
-@router.get("/all", response_model=List[UserListResponse], summary="Get all users")
+@router.get("/all", summary="Get all users")
 async def get_all_users(
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(20, ge=1, le=100, description="Number of records to return"),
     role: Optional[UserRole] = Query(None, description="Filter by user role"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status")
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    format: str = Query("standard", description="Response format: 'standard' or 'dashboard'")
 ):
     """
-    Get all users with pagination and filtering.
+    Get all users with pagination and filtering (excluding admin users).
+    
+    **Formats:**
+    - **standard**: Returns UserListResponse objects (default)
+    - **dashboard**: Returns formatted data for admin dashboard with status, lastLogin formatting, etc.
+    
+    **Note:** Admin users (role_id = 1) are excluded from the results.
     
     Requires admin role.
     """
     try:
         statement = select(User)
+        
+        # Exclude admin users (role_id != 1) from the results
+        statement = statement.where(User.role != UserRole.ADMIN)
         
         if role:
             statement = statement.where(User.role == role)
@@ -160,19 +172,27 @@ async def get_all_users(
         statement = statement.offset(skip).limit(limit)
         users = session.exec(statement).all()
         
-        return [
-            UserListResponse(
-                id=user.id,
-                email=user.email,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                role=user.role,
-                is_active=user.is_active,
-                is_verified=user.is_verified,
-                created_at=user.created_at
-            )
-            for user in users
-        ]
+        if format == "dashboard":
+            # Return dashboard format
+            from app.services.admin_service import AdminService
+            admin_service = AdminService(session)
+            return {"data": admin_service.format_users_for_dashboard(users)}
+        else:
+            # Return standard format
+            return [
+                UserListResponse(
+                    id=user.id,
+                    email=user.email,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    role=user.role,
+                    is_active=user.is_active,
+                    last_login=user.last_login,
+                    is_verified=user.is_verified,
+                    created_at=user.created_at
+                )
+                for user in users
+            ]
     except Exception as e:
         logger.error(f"Error fetching users: {e}")
         raise HTTPException(
@@ -180,7 +200,7 @@ async def get_all_users(
             detail="Internal server error"
         )
 
-@router.get("/colleges", response_model=List[CollegeProfileResponse], summary="Get all colleges")
+@router.get("/colleges", summary="Get all colleges")
 async def get_all_colleges(
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
@@ -189,19 +209,46 @@ async def get_all_colleges(
     approved_only: bool = Query(False, description="Show only approved colleges")
 ):
     """
-    Get all college profiles with pagination.
+    Get all colleges with pagination.
     
     Requires admin role.
     """
     try:
-        statement = select(CollegeProfile)
+        # Query colleges with their verification status
+        statement = select(College).offset(skip).limit(limit)
         
         if approved_only:
-            statement = statement.where(CollegeProfile.is_approved == True)
-            
-        statement = statement.offset(skip).limit(limit)
+            # Join with verification status to filter approved colleges
+            statement = (
+                select(College)
+                .join(CollegeVerificationStatus, College.id == CollegeVerificationStatus.college_id)
+                .where(CollegeVerificationStatus.status == VerificationStatus.APPROVED)
+                .offset(skip)
+                .limit(limit)
+            )
+        
         colleges = session.exec(statement).all()
-        return colleges
+        
+        result = []
+        for college in colleges:
+            # Get verification status for each college
+            verification_statement = select(CollegeVerificationStatus).where(
+                CollegeVerificationStatus.college_id == college.id
+            )
+            verification_status = session.exec(verification_statement).first()
+            
+            result.append(CollegeListResponse(
+                id=college.id,
+                college_code=college.college_code,
+                name=college.name,
+                type=college.type,
+                city=college.city,
+                district=college.district,
+                status=verification_status.status if verification_status else VerificationStatus.PENDING,
+                created_at=college.created_at
+            ))
+        
+        return {"data": result, "total_records": len(result)}
     except Exception as e:
         logger.error(f"Error fetching colleges: {e}")
         raise HTTPException(
