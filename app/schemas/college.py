@@ -102,7 +102,6 @@ class FacilitiesSchema(BaseModel):
 
 # Document Schema
 class DocumentSchema(BaseModel):
-    doc_type: str = Field(..., max_length=100, description="Document type")
     doc_file: UploadFile = Field(..., description="Document file")
 
 # Bank Details Schema
