@@ -1,3 +1,39 @@
+# --- Email Helper ---
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from app.core.config import settings
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+def send_email(to: str, subject: str, body: str) -> None:
+    """
+    Send an email using Gmail SMTP.
+    Args:
+        to (str): Recipient email address
+        subject (str): Email subject
+        body (str): Email body (plain text)
+    """
+    logger.info(f"Preparing to send email to: {to}, subject: {subject}")
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = to
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, APP_PASSWORD)
+        server.sendmail(EMAIL_ADDRESS, to, msg.as_string())
+        server.quit()
+        logger.info(f"Email sent successfully to: {to}")
+    except Exception as e:
+        logger.error(f"Failed to send email to {to}: {e}")
+        raise
 import re
 from typing import Optional
 from datetime import datetime, date

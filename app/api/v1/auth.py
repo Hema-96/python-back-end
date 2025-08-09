@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlmodel import Session
@@ -7,15 +8,84 @@ from app.schemas.auth import (
     UserRegister, UserLogin, Token, RefreshToken, 
     UserResponse, PasswordReset, PasswordChange, EmailVerification, SetNewPassword
 )
+from fastapi import Body
+import random
+import string
 from app.middleware.auth import get_current_user
 from app.models.user import User
 import logging
 from datetime import datetime
+# Validate OTP for email verification
+from pydantic import BaseModel
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+class OTPVerifyRequest(BaseModel):
+    email: str
+    otp: str
+
+@router.post("/verify-email-otp", summary="Verify email OTP")
+async def verify_email_otp(
+    data: OTPVerifyRequest,
+    session: Session = Depends(get_session)
+):
+    """
+    Verify the OTP sent to user's email address.
+    - **email**: User's email address
+    - **otp**: OTP code received by user
+    """
+    from sqlmodel import select
+    from app.models.user import User
+    statement = select(User).where(User.email == data.email)
+    user = session.exec(statement).first()
+    if not user:
+        logger.warning(f"OTP verification attempted for non-existent email: {data.email}")
+        return {
+            "success": False,
+            "message": "Account not found",
+            "email": data.email
+        }
+    # Check OTP validity (and optionally expiry)
+    if not user.email_otp or user.email_otp != data.otp:
+        logger.info(f"Invalid OTP for email: {data.email}")
+        return {
+            "success": False,
+            "message": "Invalid OTP",
+            "email": data.email
+        }
+    # Optionally check expiry (now 180 seconds)
+    if user.otp_generated_at:
+        from datetime import datetime, timedelta
+        if datetime.utcnow() - user.otp_generated_at > timedelta(seconds=180):
+            logger.info(f"Expired OTP for email: {data.email}")
+            return {
+                "success": False,
+                "message": "OTP expired",
+                "email": data.email
+            }
+    # Mark email as verified and update email_verified_at
+    from sqlmodel import update
+    now = datetime.utcnow()
+    session.exec(
+        update(User)
+        .where(User.email == data.email)
+        .values(
+            is_verified=True,
+            email_verified_at=now,
+            email_otp=None,
+            otp_generated_at=None
+        )
+    )
+    session.commit()
+    logger.info(f"Email verified for user: {data.email}")
+    return {
+        "success": True,
+        "message": "Email verified successfully",
+        "email": data.email
+    }
 @router.post("/register", response_model=dict, summary="Register a new user")
 async def register(
     user_data: UserRegister,
@@ -252,20 +322,76 @@ async def change_password(
             detail="Internal server error"
         )
 
-@router.post("/verify-email", summary="Verify email address")
-async def verify_email(
-    verification: EmailVerification,
+
+# New endpoint to send OTP to email for verification
+@router.post("/send-email-otp", summary="Send OTP to email for verification")
+async def send_email_otp(
+    email: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
     """
-    Verify user's email address using verification token.
-    
-    - **token**: Email verification token
-    
-    Marks user's email as verified.
+    Send a one-time password (OTP) to the provided email address for verification.
+    - **email**: User's email address
     """
-    # TODO: Implement email verification functionality
-    return {"message": "Email verification endpoint (to be implemented)"}
+    try:
+        from sqlmodel import select
+        from app.models.user import User
+        from app.utils.helpers import send_email
+
+        # Check if user exists with the provided email
+        statement = select(User).where(User.email == email)
+        user = session.exec(statement).first()
+        if not user:
+            logger.warning(f"OTP requested for non-existent email: {email}")
+            return {
+                "success": False,
+                "message": "Account not found",
+                "email": email
+            }
+
+        # Generate a random 6-digit OTP
+        otp = ''.join(random.choices(string.digits, k=6))
+
+        # Store OTP in user model (make sure user.email_otp and user.otp_generated_at exist)
+        user.email_otp = otp
+        user.otp_generated_at = datetime.utcnow()
+        session.add(user)
+        session.commit()
+
+        # Send OTP to email using the latest helper
+        subject = "Tamil Nadu College Portal - Email Verification Code"
+        user_name = user.first_name if user.first_name else "User"
+        body = (
+            f"Dear {user_name},\n\n"
+            f"Thank you for registering with the Tamil Nadu Engineering College Counselling Portal. "
+            f"Your One-Time Password (OTP) for email verification is: {otp}\n\n"
+            f"Please enter this code in the portal to verify your email address.\n\n"
+            f"If you did not request this, please ignore this email.\n\n"
+            f"Regards,\nTamil Nadu College Portal Team"
+        )
+        try:
+            logger.info(f"Preparing to send email to: {email}, subject: {subject}")
+            send_email(to=email, subject=subject, body=body)
+        except Exception as email_error:
+            logger.error(f"Failed to send OTP email: {email_error}")
+            return {
+                "success": False,
+                "message": "Failed to send OTP email",
+                "email": email
+            }
+
+        logger.info(f"OTP sent to email: {email}")
+        return {
+            "success": True,
+            "message": f"OTP sent successfully: {email}",
+            "email": email
+        }
+    except Exception as e:
+        logger.error(f"Error sending OTP: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
 
 @router.post("/set-new-password", summary="Set new password using email")
 async def set_new_password(
