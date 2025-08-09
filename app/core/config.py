@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     ]
     
     # Email Configuration
+    EMAIL_ADDRESS: Optional[str] = None
+    APP_PASSWORD: Optional[str] = None
     SMTP_SERVER: Optional[str] = None
     SMTP_PORT: int = 587
     SMTP_USERNAME: Optional[str] = None

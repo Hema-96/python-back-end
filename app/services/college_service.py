@@ -7,7 +7,7 @@ from app.models.college import (
     CollegeDocuments, CollegeBankDetails, CollegeVerificationStatus,
     CollegeType, CounsellingType, VerificationStatus
 )
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, CollegeProfile
 from app.schemas.college import CollegeSubmissionSchema
 from app.services.file_service import FileService
 import logging
@@ -43,48 +43,116 @@ class CollegeService:
             # Check if user already has a college
             statement = select(College).where(College.user_id == user_id)
             existing_user_college = self.session.exec(statement).first()
-            # if existing_user_college:
-            #     raise HTTPException(
-            #         status_code=status.HTTP_400_BAD_REQUEST,
-            #         detail="User already has a college registered"
-            #     )
-
+            
             # Upload logo file if provided
             logo_url = None
             if college_data.college.logo_file:
                 logo_upload = self.file_service.upload_file(college_data.college.logo_file, "college-logos")
                 logo_url = logo_upload["file_url"]
+            
+            # If user already has a college, we'll update it instead of creating new
+            if existing_user_college:
+                # Update existing college record
+                existing_user_college.college_code = college_data.college.college_code
+                existing_user_college.name = college_data.college.name
+                existing_user_college.short_name = college_data.college.short_name
+                existing_user_college.type = college_data.college.type
+                existing_user_college.university_affiliation = college_data.college.university_affiliation
+                existing_user_college.year_established = college_data.college.year_established
+                existing_user_college.naac_grade = college_data.college.naac_grade
+                existing_user_college.nba_status = college_data.college.nba_status
+                existing_user_college.aicte_approved = college_data.college.aicte_approved
+                existing_user_college.counselling_type = college_data.college.counselling_type
+                existing_user_college.address_line1 = college_data.college.address.line1
+                existing_user_college.address_line2 = college_data.college.address.line2
+                existing_user_college.city = college_data.college.address.city
+                existing_user_college.district = college_data.college.address.district
+                existing_user_college.state = college_data.college.address.state
+                existing_user_college.pincode = college_data.college.address.pincode
+                existing_user_college.phone = college_data.college.contact.phone
+                existing_user_college.mobile = college_data.college.contact.mobile
+                existing_user_college.email = college_data.college.contact.email
+                existing_user_college.website = college_data.college.contact.website
+                if logo_url:
+                    existing_user_college.logo_url = logo_url
+                existing_user_college.updated_at = datetime.utcnow()
+                
+                college = existing_user_college
+                
+                # Delete existing related records to replace with new ones
+                self.session.exec(select(CollegePrincipal).where(CollegePrincipal.college_id == college.id)).delete()
+                self.session.exec(select(CollegeSeatMatrix).where(CollegeSeatMatrix.college_id == college.id)).delete()
+                self.session.exec(select(CollegeFacilities).where(CollegeFacilities.college_id == college.id)).delete()
+                self.session.exec(select(CollegeDocuments).where(CollegeDocuments.college_id == college.id)).delete()
+                self.session.exec(select(CollegeBankDetails).where(CollegeBankDetails.college_id == college.id)).delete()
+                
+                # Don't commit yet, wait for all updates
+            else:
+                # Create new college record
+                college = College(
+                    user_id=user_id,  # Link to the user who created it
+                    college_code=college_data.college.college_code,
+                    name=college_data.college.name,
+                    short_name=college_data.college.short_name,
+                    type=college_data.college.type,
+                    university_affiliation=college_data.college.university_affiliation,
+                    year_established=college_data.college.year_established,
+                    naac_grade=college_data.college.naac_grade,
+                    nba_status=college_data.college.nba_status,
+                    aicte_approved=college_data.college.aicte_approved,
+                    counselling_type=college_data.college.counselling_type,
+                    address_line1=college_data.college.address.line1,
+                    address_line2=college_data.college.address.line2,
+                    city=college_data.college.address.city,
+                    district=college_data.college.address.district,
+                    state=college_data.college.address.state,
+                    pincode=college_data.college.address.pincode,
+                    phone=college_data.college.contact.phone,
+                    mobile=college_data.college.contact.mobile,
+                    email=college_data.college.contact.email,
+                    website=college_data.college.contact.website,
+                    logo_url=logo_url,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                self.session.add(college)
+                self.session.commit()
+                self.session.refresh(college)
 
-            # Create college record
-            college = College(
-                user_id=user_id,  # Link to the user who created it
-                college_code=college_data.college.college_code,
-                name=college_data.college.name,
-                short_name=college_data.college.short_name,
-                type=college_data.college.type,
-                university_affiliation=college_data.college.university_affiliation,
-                year_established=college_data.college.year_established,
-                naac_grade=college_data.college.naac_grade,
-                nba_status=college_data.college.nba_status,
-                aicte_approved=college_data.college.aicte_approved,
-                counselling_type=college_data.college.counselling_type,
-                address_line1=college_data.college.address.line1,
-                address_line2=college_data.college.address.line2,
-                city=college_data.college.address.city,
-                district=college_data.college.address.district,
-                state=college_data.college.address.state,
-                pincode=college_data.college.address.pincode,
-                phone=college_data.college.contact.phone,
-                mobile=college_data.college.contact.mobile,
-                email=college_data.college.contact.email,
-                website=college_data.college.contact.website,
-                logo_url=logo_url,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            self.session.add(college)
-            self.session.commit()
-            self.session.refresh(college)
+            # Check if CollegeProfile already exists for this user
+            statement = select(CollegeProfile).where(CollegeProfile.user_id == user_id)
+            existing_college_profile = self.session.exec(statement).first()
+
+            # Create CollegeProfile record
+            if existing_college_profile:
+                # Update existing CollegeProfile
+                existing_college_profile.college_name = college_data.college.name
+                existing_college_profile.college_code = college_data.college.college_code
+                existing_college_profile.address = f"{college_data.college.address.line1}, {college_data.college.address.city}, {college_data.college.address.district}, {college_data.college.address.state} - {college_data.college.address.pincode}"
+                existing_college_profile.district = college_data.college.address.district
+                existing_college_profile.state = college_data.college.address.state
+                existing_college_profile.contact_person = college_data.principal.name
+                existing_college_profile.contact_phone = college_data.principal.phone or college_data.college.contact.mobile
+                existing_college_profile.website = college_data.college.contact.website
+                existing_college_profile.updated_at = datetime.utcnow()
+                # Note: is_approved remains unchanged to preserve admin approval status
+            else:
+                # Create new CollegeProfile
+                college_profile = CollegeProfile(
+                    user_id=user_id,
+                    college_name=college_data.college.name,
+                    college_code=college_data.college.college_code,
+                    address=f"{college_data.college.address.line1}, {college_data.college.address.city}, {college_data.college.address.district}, {college_data.college.address.state} - {college_data.college.address.pincode}",
+                    district=college_data.college.address.district,
+                    state=college_data.college.address.state,
+                    contact_person=college_data.principal.name,
+                    contact_phone=college_data.principal.phone or college_data.college.contact.mobile,
+                    website=college_data.college.contact.website,
+                    is_approved=False,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                self.session.add(college_profile)
 
             # Upload principal ID proof if provided
             principal_id_proof_url = None
@@ -168,23 +236,43 @@ class CollegeService:
             self.session.add(bank_details)
 
             # Create verification status record
-            verification_status = CollegeVerificationStatus(
-                college_id=college.id,
-                is_verified=False,
-                status=VerificationStatus.PENDING,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            self.session.add(verification_status)
+            if existing_user_college:
+                # Update existing verification status
+                statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college.id)
+                existing_verification = self.session.exec(statement).first()
+                if existing_verification:
+                    existing_verification.status = VerificationStatus.PENDING
+                    existing_verification.updated_at = datetime.utcnow()
+                else:
+                    verification_status = CollegeVerificationStatus(
+                        college_id=college.id,
+                        is_verified=False,
+                        status=VerificationStatus.PENDING,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    self.session.add(verification_status)
+            else:
+                # Create new verification status record
+                verification_status = CollegeVerificationStatus(
+                    college_id=college.id,
+                    is_verified=False,
+                    status=VerificationStatus.PENDING,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                self.session.add(verification_status)
 
             self.session.commit()
             logger.info(f"College data submitted successfully for college: {college.college_code}")
             
+            action = "updated" if existing_user_college else "submitted"
             return {
-                "message": "College data submitted successfully and pending verification",
+                "message": f"College data {action} successfully and pending verification",
                 "college_id": college.id,
                 "college_code": college.college_code,
-                "status": "pending"
+                "status": "pending",
+                "action": action
             }
 
         except HTTPException:

@@ -328,12 +328,15 @@ async def get_all_colleges(
         )
         total_count = len(session.exec(count_statement).all())
         print(f'Debug: Total users with COLLEGE role: {total_count}')
+        print(f'Debug: Results: {results}')
         
         college_data = []
         for user, college_profile in results:
             print(f'Debug: Processing user {user.id}, college_profile: {college_profile}')
+            
             # Get verification status for all colleges (not just approved ones)
             verification_status = None
+            college = None
             
             # First get the main college record to get the correct college_id
             college_statement = select(College).where(College.user_id == user.id)
@@ -346,39 +349,29 @@ async def get_all_colleges(
                 )
                 verification_status = session.exec(verification_statement).first()
             
-            # Only add colleges that have profiles
-            if college_profile:
-                college_data.append({
-                    "user_id": user.id,
-                    "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                    "phone": user.phone,
-                    "is_active": user.is_active,
-                    "is_verified": user.is_verified,
-                    "last_login": user.last_login,
-                    "college_profile": {
-                        "id": college_profile.id,
-                        "college_name": college_profile.college_name,
-                        "college_code": college_profile.college_code,
-                        "address": college_profile.address,
-                        "district": college_profile.district,
-                        "state": college_profile.state,
-                        "contact_person": college_profile.contact_person,
-                        "contact_phone": college_profile.contact_phone,
-                        "website": college_profile.website,
-                        "is_approved": college_profile.is_approved,
-                        "approved_by_user_id": college_profile.approved_by_user_id,
-                        "approved_at": college_profile.approved_at,
-                        "created_at": college_profile.created_at,
-                        "updated_at": college_profile.updated_at
-                    },
-                    "verification_status": verification_status.status if verification_status else "pending",
-                    "created_at": user.created_at,
-                    "updated_at": user.updated_at
-                })
-            else:
-                print(f'Debug: User {user.id} has no college profile')
+            # Include all COLLEGE users, with or without profiles
+            college_info = {
+                "user_id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "is_active": user.is_active,
+                "is_verified": user.is_verified,
+                "last_login": user.last_login,
+                "college_profile": college_profile,
+                "verification_status": verification_status.status if verification_status else "pending",
+                "is_submitted": college_profile is not None,  # Add is_submitted key
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            }
+            
+            # If user has no college profile, set status to indicate they haven't submitted data
+            if not college_profile:
+                college_info["verification_status"] = "not_submitted"
+                print(f'Debug: User {user.id} has no college profile - status: not_submitted')
+            
+            college_data.append(college_info)
         
         return {"data": college_data, "total_records": total_count}
     except Exception as e:
