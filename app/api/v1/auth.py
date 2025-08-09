@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer
 from sqlmodel import Session
 from app.core.database import get_session
 from app.services.auth_service import AuthService
@@ -125,14 +126,38 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.post("/logout", summary="Logout user")
-async def logout():
+async def logout(
+    current_user: User = Depends(get_current_user),
+    authorization: str = Depends(HTTPBearer())
+):
     """
-    Logout user (client should discard tokens).
+    Logout user and invalidate the current token.
     
-    This endpoint is mainly for documentation purposes.
-    The actual logout should be handled by the client by discarding the tokens.
+    This endpoint will blacklist the current token, making it unusable for future requests.
+    The client should also discard the token locally.
+    
+    Requires valid authentication token.
     """
-    return {"message": "Successfully logged out"}
+    try:
+        from app.core.security import add_to_blacklist
+        
+        # Extract token from Authorization header
+        token = authorization.credentials
+        
+        # Add token to blacklist
+        add_to_blacklist(token)
+        
+        logger.info(f"User {current_user.email} logged out successfully")
+        return {
+            "message": "Successfully logged out",
+            "token_invalidated": True
+        }
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during logout"
+        )
 
 @router.post("/password-reset", summary="Request password reset")
 async def request_password_reset(

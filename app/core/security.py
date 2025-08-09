@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union, Dict, Any, Set
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
@@ -9,6 +9,24 @@ logger = logging.getLogger(__name__)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Token blacklist for logout functionality
+_token_blacklist: Set[str] = set()
+
+def add_to_blacklist(token: str) -> None:
+    """Add token to blacklist"""
+    _token_blacklist.add(token)
+    logger.info(f"Token added to blacklist")
+
+def is_token_blacklisted(token: str) -> bool:
+    """Check if token is blacklisted"""
+    return token in _token_blacklist
+
+def clear_expired_blacklist() -> None:
+    """Clear expired tokens from blacklist (can be called periodically)"""
+    # This is a simple in-memory implementation
+    # In production, you might want to use Redis or database with TTL
+    logger.info(f"Blacklist cleared, current size: {len(_token_blacklist)}")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
@@ -63,6 +81,11 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify and decode JWT token"""
     try:
+        # Check if token is blacklisted
+        if is_token_blacklisted(token):
+            logger.warning("Token is blacklisted")
+            return None
+            
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
     except JWTError as e:

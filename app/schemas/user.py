@@ -111,6 +111,7 @@ class UserListResponse(BaseModel):
     is_active: bool
     is_verified: bool
     created_at: datetime
+    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True 

@@ -141,7 +141,6 @@ class CollegeService:
                 
                 document = CollegeDocuments(
                     college_id=college.id,
-                    doc_type=doc_data.doc_type,
                     doc_url=doc_upload["file_url"],
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()

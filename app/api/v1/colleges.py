@@ -12,8 +12,12 @@ from app.schemas.college import (
 from app.middleware.auth import (
     get_current_user, require_admin, require_college
 )
-from app.models.user import User
-from app.models.college import VerificationStatus, CollegeType, CounsellingType
+from app.models.user import CollegeProfile, User
+from app.models.college import (
+    CollegeVerificationStatus, VerificationStatus, CollegeType, CounsellingType,
+    College, CollegePrincipal, CollegeSeatMatrix, CollegeFacilities, 
+    CollegeDocuments, CollegeBankDetails
+)
 import logging
 import json
 
@@ -77,9 +81,8 @@ async def submit_college_data(
     principal_id_proof_file: Optional[UploadFile] = File(None, description="Principal ID proof file"),
     cancelled_cheque_file: Optional[UploadFile] = File(None, description="Cancelled cheque file"),
     
-    # Documents (multiple files with types)
+    # Documents (multiple files)
     document_files: List[UploadFile] = File(..., description="Document files"),
-    document_types: str = Form(..., description="Document types as JSON string"),
     
     current_user: User = Depends(require_college),
     session: Session = Depends(get_session)
@@ -127,25 +130,7 @@ async def submit_college_data(
                 detail=f"Invalid seat_matrix JSON format: {str(e)}"
             )
         
-        try:
-            document_types_data = json.loads(document_types)
-            if not isinstance(document_types_data, list):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="document_types must be a JSON array"
-                )
-        except json.JSONDecodeError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid document_types JSON format: {str(e)}"
-            )
-        
-        # Validate document files and types match
-        if len(document_files) != len(document_types_data):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Number of document files ({len(document_files)}) must match number of document types ({len(document_types_data)})"
-            )
+
         
         # Validate seat matrix data
         for i, seat_data in enumerate(seat_matrix_data):
@@ -223,9 +208,8 @@ async def submit_college_data(
         
         # Create document schemas
         documents = []
-        for i, doc_file in enumerate(document_files):
+        for doc_file in document_files:
             documents.append(DocumentSchema(
-                doc_type=document_types_data[i],
                 doc_file=doc_file
             ))
         
@@ -309,7 +293,7 @@ async def get_my_college(
             detail="Internal server error"
         )
 
-@router.get("/all", response_model=List[CollegeListResponse], summary="Get all colleges (Admin only)")
+@router.get("/all", summary="Get all colleges (Admin only)")
 async def get_all_colleges(
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
@@ -322,28 +306,81 @@ async def get_all_colleges(
     **Required Role:** Admin (Role 1)
     """
     try:
-        college_service = CollegeService(session)
-        colleges = college_service.get_all_colleges(skip=skip, limit=limit)
+        from sqlmodel import select
+        from app.models.user import UserRole
         
-        result = []
-        for college in colleges:
-            # Get verification status for each college
-            from sqlmodel import select
-            statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college.id)
-            verification_status = session.exec(statement).first()
+        # Query users with COLLEGE role and join with their profiles
+        statement = (
+            select(User, CollegeProfile)
+            .join(CollegeProfile, User.id == CollegeProfile.user_id, isouter=True)  # Use left join to include users without profiles
+            .where(User.role == UserRole.COLLEGE)
+            .offset(skip)
+            .limit(limit)
+        )
+        print('user.role', User.role)
+        results = session.exec(statement).all()
+        print(f'Debug: Found {len(results)} results')
+        
+        # Get total count for pagination
+        count_statement = (
+            select(User)
+            .where(User.role == UserRole.COLLEGE)
+        )
+        total_count = len(session.exec(count_statement).all())
+        print(f'Debug: Total users with COLLEGE role: {total_count}')
+        
+        college_data = []
+        for user, college_profile in results:
+            print(f'Debug: Processing user {user.id}, college_profile: {college_profile}')
+            # Get verification status for all colleges (not just approved ones)
+            verification_status = None
             
-            result.append(CollegeListResponse(
-                id=college.id,
-                college_code=college.college_code,
-                name=college.name,
-                type=college.type,
-                city=college.city,
-                district=college.district,
-                status=verification_status.status if verification_status else VerificationStatus.PENDING,
-                created_at=college.created_at
-            ))
+            # First get the main college record to get the correct college_id
+            college_statement = select(College).where(College.user_id == user.id)
+            college = session.exec(college_statement).first()
+            
+            # Now get verification status using the correct college_id
+            if college:
+                verification_statement = select(CollegeVerificationStatus).where(
+                    CollegeVerificationStatus.college_id == college.id
+                )
+                verification_status = session.exec(verification_statement).first()
+            
+            # Only add colleges that have profiles
+            if college_profile:
+                college_data.append({
+                    "user_id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "phone": user.phone,
+                    "is_active": user.is_active,
+                    "is_verified": user.is_verified,
+                    "last_login": user.last_login,
+                    "college_profile": {
+                        "id": college_profile.id,
+                        "college_name": college_profile.college_name,
+                        "college_code": college_profile.college_code,
+                        "address": college_profile.address,
+                        "district": college_profile.district,
+                        "state": college_profile.state,
+                        "contact_person": college_profile.contact_person,
+                        "contact_phone": college_profile.contact_phone,
+                        "website": college_profile.website,
+                        "is_approved": college_profile.is_approved,
+                        "approved_by_user_id": college_profile.approved_by_user_id,
+                        "approved_at": college_profile.approved_at,
+                        "created_at": college_profile.created_at,
+                        "updated_at": college_profile.updated_at
+                    },
+                    "verification_status": verification_status.status if verification_status else "pending",
+                    "created_at": user.created_at,
+                    "updated_at": user.updated_at
+                })
+            else:
+                print(f'Debug: User {user.id} has no college profile')
         
-        return result
+        return {"data": college_data, "total_records": total_count}
     except Exception as e:
         logger.error(f"Error getting all colleges: {e}")
         raise HTTPException(
@@ -363,18 +400,119 @@ async def get_college_details(
     **Required Role:** Admin (Role 1)
     """
     try:
-        college_service = CollegeService(session)
-        college = college_service.get_college_by_id(college_id)
+        from sqlmodel import select
+        from app.models.user import UserRole
         
-        if not college:
+        # Query user by college_id (which should be user_id) and COLLEGE role
+        user_statement = (
+            select(User)
+            .where(User.id == college_id, User.role == UserRole.COLLEGE)
+        )
+        user = session.exec(user_statement).first()
+        
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="College not found"
+                detail="College user not found"
             )
         
-        return {
-            "message": "College details retrieved successfully",
-            "data": {
+        # Get college profile
+        college_profile_statement = (
+            select(CollegeProfile)
+            .where(CollegeProfile.user_id == user.id)
+        )
+        college_profile = session.exec(college_profile_statement).first()
+        
+        if not college_profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="College profile not found"
+            )
+        
+        # Get main college data
+        college_statement = (
+            select(College)
+            .where(College.user_id == user.id)
+        )
+        college = session.exec(college_statement).first()
+        
+        # Get principal information
+        principal_statement = (
+            select(CollegePrincipal)
+            .where(CollegePrincipal.college_id == college.id if college else None)
+        )
+        principal = session.exec(principal_statement).first()
+        
+        # Get seat matrix
+        seat_matrix_statement = (
+            select(CollegeSeatMatrix)
+            .where(CollegeSeatMatrix.college_id == college.id if college else None)
+        )
+        seat_matrix = session.exec(seat_matrix_statement).all()
+        
+        # Get facilities
+        facilities_statement = (
+            select(CollegeFacilities)
+            .where(CollegeFacilities.college_id == college.id if college else None)
+        )
+        facilities = session.exec(facilities_statement).first()
+        
+        # Get documents
+        documents_statement = (
+            select(CollegeDocuments)
+            .where(CollegeDocuments.college_id == college.id if college else None)
+        )
+        documents = session.exec(documents_statement).all()
+        
+        # Get bank details
+        bank_details_statement = (
+            select(CollegeBankDetails)
+            .where(CollegeBankDetails.college_id == college.id if college else None)
+        )
+        bank_details = session.exec(bank_details_statement).first()
+        
+        # Get verification status
+        verification_statement = (
+            select(CollegeVerificationStatus)
+            .where(CollegeVerificationStatus.college_id == college.id if college else None)
+        )
+        verification_status = session.exec(verification_statement).first()
+        
+        # Build response data
+        college_data = {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "is_active": user.is_active,
+                "is_verified": user.is_verified,
+                "last_login": user.last_login,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            },
+            "college_profile": {
+                "id": college_profile.id,
+                "college_name": college_profile.college_name,
+                "college_code": college_profile.college_code,
+                "address": college_profile.address,
+                "district": college_profile.district,
+                "state": college_profile.state,
+                "contact_person": college_profile.contact_person,
+                "contact_phone": college_profile.contact_phone,
+                "website": college_profile.website,
+                "is_approved": college_profile.is_approved,
+                "approved_by_user_id": college_profile.approved_by_user_id,
+                "approved_at": college_profile.approved_at,
+                "created_at": college_profile.created_at,
+                "updated_at": college_profile.updated_at
+            }
+        }
+        
+        # Add main college data if exists
+        if college:
+            college_data["college"] = {
                 "id": college.id,
                 "college_code": college.college_code,
                 "name": college.name,
@@ -400,6 +538,93 @@ async def get_college_details(
                 "created_at": college.created_at,
                 "updated_at": college.updated_at
             }
+            
+            # Add principal information
+            if principal:
+                college_data["principal"] = {
+                    "id": principal.id,
+                    "name": principal.name,
+                    "designation": principal.designation,
+                    "phone": principal.phone,
+                    "email": principal.email,
+                    "id_proof_url": principal.id_proof_url,
+                    "created_at": principal.created_at,
+                    "updated_at": principal.updated_at
+                }
+            
+            # Add seat matrix
+            if seat_matrix:
+                college_data["seat_matrix"] = [
+                    {
+                        "id": seat.id,
+                        "course_name": seat.course_name,
+                        "intake_capacity": seat.intake_capacity,
+                        "general_seats": seat.general_seats,
+                        "sc_seats": seat.sc_seats,
+                        "st_seats": seat.st_seats,
+                        "obc_seats": seat.obc_seats,
+                        "minority_seats": seat.minority_seats,
+                        "created_at": seat.created_at,
+                        "updated_at": seat.updated_at
+                    }
+                    for seat in seat_matrix
+                ]
+            
+            # Add facilities
+            if facilities:
+                college_data["facilities"] = {
+                    "id": facilities.id,
+                    "hostel_available": facilities.hostel_available,
+                    "transport_available": facilities.transport_available,
+                    "wifi_available": facilities.wifi_available,
+                    "lab_facilities": facilities.lab_facilities,
+                    "placement_cell": facilities.placement_cell,
+                    "created_at": facilities.created_at,
+                    "updated_at": facilities.updated_at
+                }
+            
+            # Add documents
+            if documents:
+                college_data["documents"] = [
+                    {
+                        "id": doc.id,
+                        "doc_url": doc.doc_url,
+                        "created_at": doc.created_at,
+                        "updated_at": doc.updated_at
+                    }
+                    for doc in documents
+                ]
+            
+            # Add bank details
+            if bank_details:
+                college_data["bank_details"] = {
+                    "id": bank_details.id,
+                    "bank_name": bank_details.bank_name,
+                    "branch": bank_details.branch,
+                    "account_number": bank_details.account_number,
+                    "ifsc_code": bank_details.ifsc_code,
+                    "upi_id": bank_details.upi_id,
+                    "cancelled_cheque_url": bank_details.cancelled_cheque_url,
+                    "created_at": bank_details.created_at,
+                    "updated_at": bank_details.updated_at
+                }
+            
+            # Add verification status
+            if verification_status:
+                college_data["verification_status"] = {
+                    "id": verification_status.id,
+                    "is_verified": verification_status.is_verified,
+                    "verified_by": verification_status.verified_by,
+                    "verification_notes": verification_status.verification_notes,
+                    "rejected_reason": verification_status.rejected_reason,
+                    "status": verification_status.status,
+                    "created_at": verification_status.created_at,
+                    "updated_at": verification_status.updated_at
+                }
+        
+        return {
+            "message": "College details retrieved successfully",
+            "data": college_data
         }
     except HTTPException:
         raise
