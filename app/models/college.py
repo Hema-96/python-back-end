@@ -42,7 +42,7 @@ class College(SQLModel, table=True):
     mobile: Optional[str] = Field(default=None, max_length=15)
     email: Optional[str] = Field(default=None, max_length=100)
     website: Optional[str] = Field(default=None)
-    logo_url: Optional[str] = Field(default=None)
+    logo_path: Optional[str] = Field(default=None, description="File path in storage (not URL)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -62,7 +62,7 @@ class CollegePrincipal(SQLModel, table=True):
     designation: Optional[str] = Field(default=None, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=15)
     email: Optional[str] = Field(default=None, max_length=100)
-    id_proof_url: Optional[str] = Field(default=None)
+    id_proof_path: Optional[str] = Field(default=None, description="File path in storage (not URL)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -102,7 +102,8 @@ class CollegeFacilities(SQLModel, table=True):
 class CollegeDocuments(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     college_id: int = Field(foreign_key="college.id")
-    doc_url: str
+    doc_path: str = Field(description="File path in storage (not URL)")
+    file_name: str = Field(max_length=255, description="Original file name")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -117,7 +118,7 @@ class CollegeBankDetails(SQLModel, table=True):
     account_number: str = Field(max_length=50)
     ifsc_code: str = Field(max_length=20)
     upi_id: Optional[str] = Field(default=None, max_length=100)
-    cancelled_cheque_url: Optional[str] = Field(default=None)
+    cancelled_cheque_path: Optional[str] = Field(default=None, description="File path in storage (not URL)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     

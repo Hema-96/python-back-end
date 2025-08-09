@@ -43,7 +43,7 @@ class FileService:
         return True
     
     def upload_file(self, file: UploadFile, folder: str = "college-documents") -> Dict[str, Any]:
-        """Upload file to Supabase storage"""
+        """Upload file to Supabase storage and return file path (not URL)"""
         try:
             # Validate file
             self.validate_file(file)
@@ -51,8 +51,8 @@ class FileService:
             # Read file content
             file_content = file.file.read()
             
-            # Generate unique filename
-            filename = f"{uuid.uuid4().hex}_{file.filename}"
+            # Generate unique filename with folder structure
+            filename = f"{folder}/{uuid.uuid4().hex}_{file.filename}"
             
             # Upload to Supabase Storage
             response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).upload(filename, file_content)
@@ -64,17 +64,14 @@ class FileService:
                     detail=f"Supabase upload error: {response['error']['message']}"
                 )
             
-            # Get public URL
-            public_url = self.supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
-            
             logger.info(f"File uploaded successfully to Supabase: {filename}")
             return {
                 "file_path": filename,
-                "file_url": public_url,
                 "file_name": file.filename,
                 "file_size": len(file_content),
                 "content_type": file.content_type,
-                "storage_type": "supabase"
+                "storage_type": "supabase",
+                "bucket": settings.SUPABASE_BUCKET
             }
                 
         except HTTPException:
@@ -86,20 +83,34 @@ class FileService:
                 detail=f"Internal server error during file upload: {str(e)}"
             )
     
+    def get_signed_url(self, file_path: str, expires_in: int = 3600) -> Optional[str]:
+        """Get signed URL for a file (for private storage access)"""
+        try:
+            # Create signed URL for private storage access
+            signed_url = self.supabase.storage.from_(settings.SUPABASE_BUCKET).create_signed_url(file_path, expires_in)
+            
+            if isinstance(signed_url, dict) and signed_url.get("error"):
+                logger.error(f"Failed to create signed URL: {signed_url['error']['message']}")
+                return None
+            
+            logger.info(f"Signed URL created successfully for: {file_path}")
+            return signed_url
+            
+        except Exception as e:
+            logger.error(f"Error creating signed URL: {e}")
+            return None
+    
     def delete_file(self, file_path: str) -> bool:
         """Delete file from Supabase storage"""
         try:
-            # Extract filename from path
-            filename = os.path.basename(file_path)
-            
-            # Delete from Supabase storage
-            response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).remove([filename])
+            # Delete from Supabase storage using the full path
+            response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).remove([file_path])
             
             if isinstance(response, dict) and response.get("error"):
                 logger.error(f"Failed to delete from Supabase: {response['error']['message']}")
                 return False
             
-            logger.info(f"File deleted successfully from Supabase: {filename}")
+            logger.info(f"File deleted successfully from Supabase: {file_path}")
             return True
                 
         except Exception as e:
@@ -107,10 +118,5 @@ class FileService:
             return False
     
     def get_file_url(self, file_path: str) -> Optional[str]:
-        """Get public URL for a file"""
-        try:
-            filename = os.path.basename(file_path)
-            return self.supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
-        except Exception as e:
-            logger.error(f"Error getting file URL: {e}")
-            return None 
+        """Get signed URL for a file (deprecated - use get_signed_url instead)"""
+        return self.get_signed_url(file_path) 

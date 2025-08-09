@@ -4,6 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_session
 from app.services.college_service import CollegeService
+from app.services.file_service import FileService
 from app.schemas.college import (
     CollegeSubmissionSchema, CollegeResponse, CollegeListResponse,
     CollegeVerificationResponse, CollegeBasicInfo, AddressSchema, ContactSchema,
@@ -268,6 +269,12 @@ async def get_my_college(
         # Return the first college (assuming one college per user)
         college = colleges[0]
         
+        # Generate signed URL for logo if it exists
+        logo_url = None
+        if college.logo_path:
+            file_service = FileService()
+            logo_url = file_service.get_signed_url(college.logo_path, 3600)
+        
         return {
             "message": "College data retrieved successfully",
             "data": {
@@ -279,7 +286,7 @@ async def get_my_college(
                 "city": college.city,
                 "district": college.district,
                 "state": college.state,
-                "logo_url": college.logo_url,
+                "logo_url": logo_url,
                 "created_at": college.created_at,
                 "updated_at": college.updated_at
             }
@@ -471,6 +478,9 @@ async def get_college_details(
         )
         verification_status = session.exec(verification_statement).first()
         
+        # Initialize file service for generating signed URLs
+        file_service = FileService()
+        
         # Build response data
         college_data = {
             "user": {
@@ -505,6 +515,11 @@ async def get_college_details(
         
         # Add main college data if exists
         if college:
+            # Generate signed URL for logo
+            logo_url = None
+            if college.logo_path:
+                logo_url = file_service.get_signed_url(college.logo_path, 3600)
+            
             college_data["college"] = {
                 "id": college.id,
                 "college_code": college.college_code,
@@ -527,20 +542,25 @@ async def get_college_details(
                 "mobile": college.mobile,
                 "email": college.email,
                 "website": college.website,
-                "logo_url": college.logo_url,
+                "logo_url": logo_url,
                 "created_at": college.created_at,
                 "updated_at": college.updated_at
             }
             
             # Add principal information
             if principal:
+                # Generate signed URL for ID proof
+                id_proof_url = None
+                if principal.id_proof_path:
+                    id_proof_url = file_service.get_signed_url(principal.id_proof_path, 3600)
+                
                 college_data["principal"] = {
                     "id": principal.id,
                     "name": principal.name,
                     "designation": principal.designation,
                     "phone": principal.phone,
                     "email": principal.email,
-                    "id_proof_url": principal.id_proof_url,
+                    "id_proof_url": id_proof_url,
                     "created_at": principal.created_at,
                     "updated_at": principal.updated_at
                 }
@@ -576,20 +596,30 @@ async def get_college_details(
                     "updated_at": facilities.updated_at
                 }
             
-            # Add documents
+            # Add documents with signed URLs
             if documents:
-                college_data["documents"] = [
-                    {
+                college_data["documents"] = []
+                for doc in documents:
+                    # Generate signed URL for document
+                    doc_url = None
+                    if doc.doc_path:
+                        doc_url = file_service.get_signed_url(doc.doc_path, 3600)
+                    
+                    college_data["documents"].append({
                         "id": doc.id,
-                        "doc_url": doc.doc_url,
+                        "doc_url": doc_url,
+                        "file_name": doc.file_name,
                         "created_at": doc.created_at,
                         "updated_at": doc.updated_at
-                    }
-                    for doc in documents
-                ]
+                    })
             
             # Add bank details
             if bank_details:
+                # Generate signed URL for cancelled cheque
+                cancelled_cheque_url = None
+                if bank_details.cancelled_cheque_path:
+                    cancelled_cheque_url = file_service.get_signed_url(bank_details.cancelled_cheque_path, 3600)
+                
                 college_data["bank_details"] = {
                     "id": bank_details.id,
                     "bank_name": bank_details.bank_name,
@@ -597,7 +627,7 @@ async def get_college_details(
                     "account_number": bank_details.account_number,
                     "ifsc_code": bank_details.ifsc_code,
                     "upi_id": bank_details.upi_id,
-                    "cancelled_cheque_url": bank_details.cancelled_cheque_url,
+                    "cancelled_cheque_url": cancelled_cheque_url,
                     "created_at": bank_details.created_at,
                     "updated_at": bank_details.updated_at
                 }

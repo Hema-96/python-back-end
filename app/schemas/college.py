@@ -103,6 +103,7 @@ class FacilitiesSchema(BaseModel):
 # Document Schema
 class DocumentSchema(BaseModel):
     doc_file: UploadFile = Field(..., description="Document file")
+    file_name: Optional[str] = Field(None, description="Original file name")
 
 # Bank Details Schema
 class BankDetailsSchema(BaseModel):

@@ -45,10 +45,10 @@ class CollegeService:
             existing_user_college = self.session.exec(statement).first()
             
             # Upload logo file if provided
-            logo_url = None
+            logo_path = None
             if college_data.college.logo_file:
                 logo_upload = self.file_service.upload_file(college_data.college.logo_file, "college-logos")
-                logo_url = logo_upload["file_url"]
+                logo_path = logo_upload["file_path"]
             
             # If user already has a college, we'll update it instead of creating new
             if existing_user_college:
@@ -73,8 +73,8 @@ class CollegeService:
                 existing_user_college.mobile = college_data.college.contact.mobile
                 existing_user_college.email = college_data.college.contact.email
                 existing_user_college.website = college_data.college.contact.website
-                if logo_url:
-                    existing_user_college.logo_url = logo_url
+                if logo_path:
+                    existing_user_college.logo_path = logo_path
                 existing_user_college.updated_at = datetime.utcnow()
                 
                 college = existing_user_college
@@ -111,7 +111,7 @@ class CollegeService:
                     mobile=college_data.college.contact.mobile,
                     email=college_data.college.contact.email,
                     website=college_data.college.contact.website,
-                    logo_url=logo_url,
+                    logo_path=logo_path,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
@@ -155,10 +155,10 @@ class CollegeService:
                 self.session.add(college_profile)
 
             # Upload principal ID proof if provided
-            principal_id_proof_url = None
+            principal_id_proof_path = None
             if college_data.principal.id_proof_file:
                 id_proof_upload = self.file_service.upload_file(college_data.principal.id_proof_file, "principal-documents")
-                principal_id_proof_url = id_proof_upload["file_url"]
+                principal_id_proof_path = id_proof_upload["file_path"]
 
             # Create principal record
             principal = CollegePrincipal(
@@ -167,7 +167,7 @@ class CollegeService:
                 designation=college_data.principal.designation,
                 phone=college_data.principal.phone,
                 email=college_data.principal.email,
-                id_proof_url=principal_id_proof_url,
+                id_proof_path=principal_id_proof_path,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -207,19 +207,23 @@ class CollegeService:
                 # Upload document file
                 doc_upload = self.file_service.upload_file(doc_data.doc_file, "college-documents")
                 
+                # Extract original file name from UploadFile
+                original_file_name = doc_data.doc_file.filename
+                
                 document = CollegeDocuments(
                     college_id=college.id,
-                    doc_url=doc_upload["file_url"],
+                    doc_path=doc_upload["file_path"],
+                    file_name=original_file_name,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
                 self.session.add(document)
 
             # Upload cancelled cheque if provided
-            cancelled_cheque_url = None
+            cancelled_cheque_path = None
             if college_data.bank_details.cancelled_cheque_file:
                 cheque_upload = self.file_service.upload_file(college_data.bank_details.cancelled_cheque_file, "bank-documents")
-                cancelled_cheque_url = cheque_upload["file_url"]
+                cancelled_cheque_path = cheque_upload["file_path"]
 
             # Create bank details record
             bank_details = CollegeBankDetails(
@@ -229,7 +233,7 @@ class CollegeService:
                 account_number=college_data.bank_details.account_number,
                 ifsc_code=college_data.bank_details.ifsc_code,
                 upi_id=college_data.bank_details.upi_id,
-                cancelled_cheque_url=cancelled_cheque_url,
+                cancelled_cheque_path=cancelled_cheque_path,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
