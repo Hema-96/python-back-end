@@ -486,3 +486,146 @@ async def get_student_documents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
         )
+
+@router.get("/{student_id}", summary="Get detailed student information (Admin only)")
+async def get_student_details(
+    student_id: int,
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session)
+):
+    """
+    Get detailed information about a specific student.
+    
+    **Required Role:** Admin (Role 1)
+    """
+    try:
+        from sqlmodel import select
+        from app.models.user import UserRole
+        
+        # Query user by student_id (which should be user_id) and STUDENT role
+        user_statement = (
+            select(User)
+            .where(User.id == student_id, User.role == UserRole.STUDENT)
+        )
+        user = session.exec(user_statement).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student user not found"
+            )
+        
+        # Get student profile
+        # Note: student_id parameter is actually the user_id
+        student_statement = (
+            select(Student)
+            .where(Student.user_id == student_id)
+        )
+        student = session.exec(student_statement).first()
+        
+        if not student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student profile not found"
+            )
+        
+        # Get documents
+        documents_statement = (
+            select(StudentDocuments)
+            .where(StudentDocuments.student_id == student.id)
+        )
+        documents = session.exec(documents_statement).all()
+        
+        # Get verification status
+        verification_statement = (
+            select(StudentVerificationStatus)
+            .where(StudentVerificationStatus.user_id == student_id)
+        )
+        verification_status = session.exec(verification_statement).first()
+        
+        # Initialize file service for generating signed URLs
+        file_service = FileService()
+        
+        # Build response data
+        student_data = {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "is_active": user.is_active,
+                "is_verified": user.is_verified,
+                "last_login": user.last_login,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            },
+            "student": {
+                "id": student.id,
+                "user_id": student.user_id,
+                "date_of_birth": student.date_of_birth,
+                "gender": student.gender,
+                "address_line1": student.address_line1,
+                "address_line2": student.address_line2,
+                "city": student.city,
+                "district": student.district,
+                "state": student.state,
+                "pincode": student.pincode,
+                "parent_name": student.parent_name,
+                "parent_phone": student.parent_phone,
+                "parent_email": student.parent_email,
+                "caste_category": student.caste_category,
+                "annual_income": student.annual_income,
+                "minority_status": student.minority_status,
+                "physically_challenged": student.physically_challenged,
+                "sports_quota": student.sports_quota,
+                "ncc_quota": student.ncc_quota,
+                "created_at": student.created_at,
+                "updated_at": student.updated_at
+            }
+        }
+        
+        # Add documents with signed URLs
+        if documents:
+            student_data["documents"] = []
+            for doc in documents:
+                # Generate signed URL for document
+                doc_url = None
+                if doc.doc_path:
+                    doc_url = file_service.get_signed_url(doc.doc_path, 3600)
+                
+                student_data["documents"].append({
+                    "id": doc.id,
+                    "student_id": doc.student_id,
+                    "document_type": doc.document_type,
+                    "doc_path": doc.doc_path,
+                    "file_name": doc.file_name,
+                    "doc_url": doc_url,
+                    "created_at": doc.created_at,
+                    "updated_at": doc.updated_at
+                })
+        
+        # Add verification status
+        if verification_status:
+            student_data["verification_status"] = {
+                "id": verification_status.id,
+                "status": verification_status.status,
+                "remarks": verification_status.remarks,
+                "verified_by_user_id": verification_status.verified_by_user_id,
+                "verified_at": verification_status.verified_at,
+                "created_at": verification_status.created_at,
+                "updated_at": verification_status.updated_at
+            }
+        
+        return {
+            "message": "Student details retrieved successfully",
+            "data": student_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting student details: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
