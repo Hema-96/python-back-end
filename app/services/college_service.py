@@ -250,6 +250,7 @@ class CollegeService:
                 else:
                     verification_status = CollegeVerificationStatus(
                         college_id=college.id,
+                        user_id=user_id,
                         is_verified=False,
                         status=VerificationStatus.PENDING,
                         created_at=datetime.utcnow(),
@@ -260,6 +261,7 @@ class CollegeService:
                 # Create new verification status record
                 verification_status = CollegeVerificationStatus(
                     college_id=college.id,
+                    user_id=user_id,
                     is_verified=False,
                     status=VerificationStatus.PENDING,
                     created_at=datetime.utcnow(),
@@ -316,11 +318,11 @@ class CollegeService:
             logger.error(f"Error getting all colleges: {e}")
             return []
 
-    def update_college_verification(self, college_id: int, is_verified: bool, verified_by: int, notes: Optional[str] = None) -> Dict[str, Any]:
+    def update_college_verification(self, user_id: int, is_verified: bool, verified_by: int, notes: Optional[str] = None) -> Dict[str, Any]:
         """Update college verification status"""
         try:
             # Get college verification status
-            statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.college_id == college_id)
+            statement = select(CollegeVerificationStatus).where(CollegeVerificationStatus.user_id == user_id)
             verification_status = self.session.exec(statement).first()
             
             if not verification_status:
@@ -339,10 +341,10 @@ class CollegeService:
             self.session.add(verification_status)
             self.session.commit()
 
-            logger.info(f"College verification updated: {college_id}, verified: {is_verified}")
+            logger.info(f"College verification updated: {user_id}, verified: {is_verified}")
             return {
                 "message": "College verification status updated successfully",
-                "college_id": college_id,
+                "user_id": user_id,
                 "is_verified": is_verified,
                 "status": verification_status.status
             }

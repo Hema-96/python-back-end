@@ -187,7 +187,28 @@ class CollegeListResponse(BaseModel):
     city: Optional[str] = None
     district: Optional[str] = None
     status: VerificationStatus
+    numeric_status: int = Field(..., description="Numeric status: 1=Pending, 2=Approved, 3=Rejected")
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CollegeDocumentsResponse(BaseModel):
+    id: int
+    college_id: int
+    doc_path: str
+    file_name: str
+    doc_url: Optional[str] = Field(None, description="Signed URL for document access")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CollegeDocumentsListResponse(BaseModel):
+    data: List[CollegeDocumentsResponse] = Field(..., description="List of college documents")
+    total_records: int = Field(..., description="Total number of documents")
+    message: str = Field(default="Documents retrieved successfully", description="Response message")
 
     class Config:
         from_attributes = True 

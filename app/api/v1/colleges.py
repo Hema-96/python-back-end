@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
-from sqlmodel import Session
+from sqlmodel import Session, select
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_session
@@ -8,7 +8,8 @@ from app.services.file_service import FileService
 from app.schemas.college import (
     CollegeSubmissionSchema, CollegeResponse, CollegeListResponse,
     CollegeVerificationResponse, CollegeBasicInfo, AddressSchema, ContactSchema,
-    PrincipalSchema, SeatMatrixSchema, FacilitiesSchema, DocumentSchema, BankDetailsSchema
+    PrincipalSchema, SeatMatrixSchema, FacilitiesSchema, DocumentSchema, BankDetailsSchema,
+    CollegeDocumentsResponse, CollegeDocumentsListResponse
 )
 from app.middleware.auth import (
     get_current_user, require_admin, require_college
@@ -269,6 +270,22 @@ async def get_my_college(
         # Return the first college (assuming one college per user)
         college = colleges[0]
         
+        # Get verification status for this college
+        verification_statement = select(CollegeVerificationStatus).where(
+            CollegeVerificationStatus.college_id == college.id
+        )
+        verification_status = session.exec(verification_statement).first()
+        
+        # Determine numeric status based on verification status
+        if not verification_status:
+            status = 1  # Pending - no entry in verification table
+        elif verification_status.status == "approved":
+            status = 2  # Approved - entry exists with status APPROVED
+        elif verification_status.status == "rejected":
+            status = 3  # Rejected - entry exists with status REJECTED
+        else:
+            status = 1  # Default to pending for any other status
+        
         # Generate signed URL for logo if it exists
         logo_url = None
         if college.logo_path:
@@ -287,6 +304,8 @@ async def get_my_college(
                 "district": college.district,
                 "state": college.state,
                 "logo_url": logo_url,
+                "status": status,  # New numeric status field
+                "verification_status": verification_status.status if verification_status else "pending",  # Keep existing text status
                 "created_at": college.created_at,
                 "updated_at": college.updated_at
             }
@@ -356,6 +375,16 @@ async def get_all_colleges(
                 )
                 verification_status = session.exec(verification_statement).first()
             
+            # Determine numeric status based on verification status
+            if not verification_status:
+                status = 1  # Pending - no entry in verification table
+            elif verification_status.status == "approved":
+                status = 2  # Approved - entry exists with status APPROVED
+            elif verification_status.status == "rejected":
+                status = 3  # Rejected - entry exists with status REJECTED
+            else:
+                status = 1  # Default to pending for any other status
+            
             # Include all COLLEGE users, with or without profiles
             college_info = {
                 "user_id": user.id,
@@ -367,15 +396,18 @@ async def get_all_colleges(
                 "is_verified": user.is_verified,
                 "last_login": user.last_login,
                 "college_profile": college_profile,
+                "status": status,  # New numeric status field
                 "verification_status": verification_status.status if verification_status else "pending",
                 "is_submitted": college_profile is not None,  # Add is_submitted key
                 "created_at": user.created_at,
-                "updated_at": user.updated_at
+                "updated_at": user.updated_at,
+                
             }
             
             # If user has no college profile, set status to indicate they haven't submitted data
             if not college_profile:
                 college_info["verification_status"] = "not_submitted"
+                college_info["status"] = 1  # Set numeric status to pending for users without profiles
                 print(f'Debug: User {user.id} has no college profile - status: not_submitted')
             
             college_data.append(college_info)
@@ -658,12 +690,10 @@ async def get_college_details(
             detail="Internal server error"
         )
 
-@router.post("/{college_id}/verify", summary="Verify or reject college (Admin only)")
+@router.post("/{user_id}/verify", summary="Verify or reject college (Admin only)")
 async def verify_college(
-    college_id: int,
-    is_approved: bool = Query(..., description="Whether to approve or reject the college"),
-    notes: Optional[str] = Query(None, description="Verification notes"),
-    rejected_reason: Optional[str] = Query(None, description="Reason for rejection (if rejected)"),
+    user_id: int,
+    verification_data: dict,
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_session)
 ):
@@ -672,11 +702,25 @@ async def verify_college(
     
     **Required Role:** Admin (Role 1)
     
-    - **is_approved**: True to approve, False to reject
-    - **notes**: Optional verification notes
-    - **rejected_reason**: Required if rejecting the college
+    **Request Body (JSON):**
+    ```json
+    {
+        "is_approved": true,
+        "notes": "Optional verification notes",
+        "rejected_reason": "Required if rejecting the college"
+    }
+    ```
+    
+    - **is_approved**: Boolean - True to approve, False to reject
+    - **notes**: Optional string - Verification notes
+    - **rejected_reason**: Required string if rejecting the college
     """
     try:
+        # Extract data from JSON body
+        is_approved = verification_data.get("is_approved")
+        notes = verification_data.get("notes")
+        rejected_reason = verification_data.get("rejected_reason")
+        
         if not is_approved and not rejected_reason:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -685,7 +729,7 @@ async def verify_college(
         
         college_service = CollegeService(session)
         result = college_service.update_college_verification(
-            college_id=college_id,
+            user_id=user_id,
             is_verified=is_approved,
             verified_by=current_user.id,
             notes=notes
@@ -728,6 +772,9 @@ async def get_pending_colleges(
             verification_status = session.exec(statement).first()
             
             if verification_status:
+                # Determine numeric status for pending colleges
+                numeric_status = 1  # Pending colleges always have status 1
+                
                 result.append(CollegeListResponse(
                     id=college.id,
                     college_code=college.college_code,
@@ -736,6 +783,7 @@ async def get_pending_colleges(
                     city=college.city,
                     district=college.district,
                     status=verification_status.status,
+                    numeric_status=numeric_status,
                     created_at=college.created_at
                 ))
         
@@ -771,6 +819,9 @@ async def get_approved_colleges(
             verification_status = session.exec(statement).first()
             
             if verification_status:
+                # Determine numeric status for approved colleges
+                numeric_status = 2  # Approved colleges always have status 2
+                
                 result.append(CollegeListResponse(
                     id=college.id,
                     college_code=college.college_code,
@@ -779,12 +830,90 @@ async def get_approved_colleges(
                     city=college.city,
                     district=college.district,
                     status=verification_status.status,
+                    numeric_status=numeric_status,
                     created_at=college.created_at
                 ))
         
         return result
     except Exception as e:
         logger.error(f"Error getting approved colleges: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+@router.get("/{college_id}/documents", response_model=CollegeDocumentsListResponse, summary="Get college documents")
+async def get_college_documents(
+    college_id: int,
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session)
+):
+    """
+    Get all documents for a specific college.
+    
+    **Required Role:** College Administrator (Role 2) - can only access their own college documents
+    **Admin Role:** Admin (Role 1) - can access any college documents
+    
+    Returns a structured response with documents list and metadata.
+    """
+    try:
+        # Check if user is admin or owns the college
+        if current_user.role != 1:  # Not admin
+            # Get the college to check ownership
+            statement = select(College).where(College.id == college_id)
+            college = session.exec(statement).first()
+            
+            if not college:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="College not found"
+                )
+            
+            if college.user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. You can only access your own college documents."
+                )
+        
+        # Get all documents for the college
+        statement = select(CollegeDocuments).where(CollegeDocuments.college_id == college_id)
+        documents = session.exec(statement).all()
+        
+        if not documents:
+            return CollegeDocumentsListResponse(
+                data=[],
+                total_records=0,
+                message="No documents found for this college"
+            )
+        
+        # Generate signed URLs for each document
+        file_service = FileService()
+        result = []
+        
+        for doc in documents:
+            # Generate signed URL with 1 hour expiry
+            doc_url = file_service.get_signed_url(doc.doc_path, 3600)
+            
+            result.append(CollegeDocumentsResponse(
+                id=doc.id,
+                college_id=doc.college_id,
+                doc_path=doc.doc_path,
+                file_name=doc.file_name,
+                doc_url=doc_url,
+                created_at=doc.created_at,
+                updated_at=doc.updated_at
+            ))
+        
+        return CollegeDocumentsListResponse(
+            data=result,
+            total_records=len(result),
+            message="Documents retrieved successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting college documents: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"

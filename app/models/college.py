@@ -128,6 +128,7 @@ class CollegeBankDetails(SQLModel, table=True):
 class CollegeVerificationStatus(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     college_id: int = Field(foreign_key="college.id", unique=True)
+    user_id: int = Field(foreign_key="user.id", description="User who submitted the college for verification")
     is_verified: bool = Field(default=False)
     verified_by: Optional[int] = Field(foreign_key="user.id", default=None)
     verification_notes: Optional[str] = Field(default=None)

@@ -87,14 +87,20 @@ class FileService:
         """Get signed URL for a file (for private storage access)"""
         try:
             # Create signed URL for private storage access
-            signed_url = self.supabase.storage.from_(settings.SUPABASE_BUCKET).create_signed_url(file_path, expires_in)
+            response = self.supabase.storage.from_(settings.SUPABASE_BUCKET).create_signed_url(file_path, expires_in)
             
-            if isinstance(signed_url, dict) and signed_url.get("error"):
-                logger.error(f"Failed to create signed URL: {signed_url['error']['message']}")
+            if isinstance(response, dict) and response.get("error"):
+                logger.error(f"Failed to create signed URL: {response['error']['message']}")
                 return None
             
-            logger.info(f"Signed URL created successfully for: {file_path}")
-            return signed_url
+            # Extract the signed URL from the response
+            if isinstance(response, dict) and response.get("signedURL"):
+                signed_url = response["signedURL"]
+                logger.info(f"Signed URL created successfully for: {file_path}")
+                return signed_url
+            else:
+                logger.error(f"Unexpected response format from Supabase: {response}")
+                return None
             
         except Exception as e:
             logger.error(f"Error creating signed URL: {e}")
