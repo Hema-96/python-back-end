@@ -24,6 +24,8 @@ psycopg2-binary
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
-supabase==2.3.4
 python-dotenv
+supabase==2.3.5
+gotrue==2.4.4
+httpx==0.25.2
 
