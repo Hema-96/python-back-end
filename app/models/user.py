@@ -4,6 +4,9 @@ from datetime import datetime
 from enum import IntEnum
 from sqlalchemy import JSON
 
+from app.models.college import College
+from app.models.student import Student
+
 class UserRole(IntEnum):
     ADMIN = 1
     COLLEGE = 2
@@ -32,6 +35,7 @@ class User(SQLModel, table=True):
     college_profile: Optional["CollegeProfile"] = Relationship(back_populates="user")
     student_profile: Optional["StudentProfile"] = Relationship(back_populates="user")
     colleges: List["College"] = Relationship(back_populates="user")
+    students: List["Student"] = Relationship(back_populates="user")
 
 class AdminProfile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

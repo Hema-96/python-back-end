@@ -4,6 +4,7 @@ from .college import (
     CollegeDocuments, CollegeBankDetails, CollegeVerificationStatus,
     CounsellingType, CollegeType, VerificationStatus
 )
+from .student import Student, StudentDocuments, StudentVerificationStatus, Gender, CasteCategory
 
 __all__ = [
     "User",
@@ -20,5 +21,10 @@ __all__ = [
     "CollegeVerificationStatus",
     "CounsellingType",
     "CollegeType",
-    "VerificationStatus"
+    "VerificationStatus",
+    "Student",
+    "StudentDocuments",
+    "StudentVerificationStatus",
+    "Gender",
+    "CasteCategory"
 ] 

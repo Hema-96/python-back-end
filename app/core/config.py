@@ -5,7 +5,7 @@ import os
 class Settings(BaseSettings):
     # Application Configuration
     APP_NAME: str = "Tamil Nadu Engineering College Counselling"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = False  # Set to False to reduce verbose logging
     ENVIRONMENT: str = "development"
     
