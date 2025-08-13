@@ -5,6 +5,12 @@ from .college import (
     CounsellingType, CollegeType, VerificationStatus
 )
 from .student import Student, StudentDocuments, StudentVerificationStatus, Gender, CasteCategory
+from .access_control import (
+    Permission, Role, RolePermission, UserRoleAssignment,
+    EndpointAccess, AccessLog, SessionLog,
+    PermissionType, ResourceType, AuditAction, StageType,
+    Stage, StagePermission
+)
 
 __all__ = [
     "User",
@@ -26,5 +32,18 @@ __all__ = [
     "StudentDocuments",
     "StudentVerificationStatus",
     "Gender",
-    "CasteCategory"
+    "CasteCategory",
+    "Permission",
+    "Role",
+    "RolePermission",
+    "UserRoleAssignment",
+    "EndpointAccess",
+    "AccessLog",
+    "SessionLog",
+    "PermissionType",
+    "ResourceType",
+    "AuditAction",
+    "StageType",
+    "Stage",
+    "StagePermission"
 ] 

@@ -101,11 +101,39 @@ async def register(
     - **phone**: User's phone number (optional)
     - **role**: User's role (admin, college, or student)
     
+    **Stage-based Access Control:**
+    - Stage 1: Only college registration allowed
+    - Stage 2: Only student registration allowed
+    - Other stages: No registration allowed
+    
     Returns user information and authentication tokens.
     """
     try:
+        # Check stage-based registration permissions
+        from app.services.stage_service import StageService
+        stage_service = StageService(session)
+        
+        # Convert role integer to UserRole enum
+        from app.models.user import UserRole
+        user_role = UserRole(user_data.role)
+        
+        if not stage_service.is_registration_allowed(user_role):
+            current_stage_info = stage_service.get_stage_info()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "message": "Registration not allowed in current stage",
+                    "current_stage": current_stage_info.stage_info.get("message", "No active stage"),
+                    "description": current_stage_info.stage_info.get("description", ""),
+                    "allowed_actions": current_stage_info.allowed_actions,
+                    "blocked_actions": current_stage_info.blocked_actions
+                }
+            )
+        
         auth_service = AuthService(session)
         return auth_service.register_user(user_data)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Registration error: {e}")
         raise

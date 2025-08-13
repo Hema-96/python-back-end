@@ -2,6 +2,7 @@ from .auth import *
 from .user import *
 from .college import *
 from .student import *
+from .access_control import *
 
 __all__ = [
     # Auth schemas
@@ -20,9 +21,23 @@ __all__ = [
     "PrincipalSchema", "SeatMatrixSchema", "FacilitiesSchema", "DocumentSchema", "BankDetailsSchema",
     "CollegeDocumentsResponse", "CollegeDocumentsListResponse",
     
-                    # Student schemas
-                "StudentSubmissionSchema", "StudentResponse", "StudentListResponse",
-                "StudentVerificationResponse", "StudentPersonalInfo", "StudentAcademicInfo", "StudentDocumentSchema", "StudentDocumentUploadSchema",
-                "StudentDocumentsResponse", "StudentDocumentsListResponse",
-                "Gender", "CasteCategory"
+    # Student schemas
+    "StudentSubmissionSchema", "StudentResponse", "StudentListResponse",
+    "StudentVerificationResponse", "StudentPersonalInfo", "StudentAcademicInfo", "StudentDocumentSchema", "StudentDocumentUploadSchema",
+    "StudentDocumentsResponse", "StudentDocumentsListResponse",
+    "Gender", "CasteCategory",
+    
+    # Access Control schemas
+    "PermissionBase", "PermissionCreate", "PermissionUpdate", "PermissionResponse",
+    "RoleBase", "RoleCreate", "RoleUpdate", "RoleResponse",
+    "RolePermissionBase", "RolePermissionCreate", "RolePermissionUpdate", "RolePermissionResponse",
+    "UserRoleAssignmentBase", "UserRoleAssignmentCreate", "UserRoleAssignmentUpdate", "UserRoleAssignmentResponse",
+    "EndpointAccessBase", "EndpointAccessCreate", "EndpointAccessUpdate", "EndpointAccessResponse",
+    "AccessLogBase", "AccessLogCreate", "AccessLogResponse",
+    "SessionLogBase", "SessionLogCreate", "SessionLogResponse",
+    
+    # Stage Management schemas
+    "StageBase", "StageCreate", "StageUpdate", "StageResponse",
+    "StagePermissionBase", "StagePermissionCreate", "StagePermissionUpdate", "StagePermissionResponse",
+    "CurrentStageResponse"
 ] 
