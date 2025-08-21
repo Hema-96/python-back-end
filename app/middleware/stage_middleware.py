@@ -21,11 +21,11 @@ async def stage_access_middleware(request: Request, call_next):
             "/docs",
             "/redoc", 
             "/openapi.json",
-            "/api/v1/stages/current",
-            "/api/v1/stages/check-registration",
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/verify-email-otp"
+            "/api/stages/current",
+            "/api/stages/check-registration",
+            "/api/auth/login",
+            "/api/auth/refresh",
+            "/api/auth/verify-email-otp"
         ]
         
         if any(request.url.path.startswith(path) for path in skip_paths):
